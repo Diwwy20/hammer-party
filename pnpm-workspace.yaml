@@ -1,0 +1,8 @@
+packages:
+  - "packages/*"
+
+# Allow these dependencies to run their install/build scripts.
+# esbuild powers vite + tsx; msgpackr-extract is an optional native speedup for Colyseus.
+onlyBuiltDependencies:
+  - esbuild
+  - msgpackr-extract
