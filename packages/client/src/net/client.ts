@@ -6,7 +6,6 @@ import { Client } from "colyseus.js";
  * works on the same LAN without hardcoding an IP. Override with VITE_SERVER_URL.
  */
 export const SERVER_URL: string =
-  (import.meta.env.VITE_SERVER_URL as string | undefined) ??
-  `ws://${location.hostname}:2567`;
+  (import.meta.env.VITE_SERVER_URL as string | undefined) ?? `ws://${location.hostname}:2567`;
 
 export const colyseus = new Client(SERVER_URL);

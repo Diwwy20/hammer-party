@@ -26,7 +26,13 @@ function Hat({ id }: { id: string }) {
         <group position={[0, 2.42, 0]}>
           <mesh castShadow>
             <cylinderGeometry args={[0.34, 0.34, 0.18, 8]} />
-            <meshStandardMaterial color="#e8c583" metalness={0.85} roughness={0.25} emissive="#7a5a1e" emissiveIntensity={0.4} />
+            <meshStandardMaterial
+              color="#e8c583"
+              metalness={0.85}
+              roughness={0.25}
+              emissive="#7a5a1e"
+              emissiveIntensity={0.4}
+            />
           </mesh>
           {[0, 1, 2, 3, 4].map((i) => {
             const a = (i / 5) * Math.PI * 2;
@@ -100,7 +106,12 @@ function Face({ id }: { id: string }) {
       return (
         <mesh position={[0, y, z]}>
           <boxGeometry args={[0.54, 0.16, 0.05]} />
-          <meshStandardMaterial color="#39e0e0" emissive="#39e0e0" emissiveIntensity={0.8} roughness={0.2} />
+          <meshStandardMaterial
+            color="#39e0e0"
+            emissive="#39e0e0"
+            emissiveIntensity={0.8}
+            roughness={0.2}
+          />
         </mesh>
       );
     case "nerd":
@@ -164,7 +175,12 @@ function Back({ id }: { id: string }) {
           {[-1, 1].map((s) => (
             <mesh key={s} position={[0.34 * s, 0, 0]} rotation={[0, 0.5 * s, 0.25 * s]} castShadow>
               <boxGeometry args={[0.5, 0.7, 0.05]} />
-              <meshStandardMaterial color="#eaf2ff" emissive="#8fb6ff" emissiveIntensity={0.15} side={2} />
+              <meshStandardMaterial
+                color="#eaf2ff"
+                emissive="#8fb6ff"
+                emissiveIntensity={0.15}
+                side={2}
+              />
             </mesh>
           ))}
         </group>
@@ -247,7 +263,13 @@ export function CharacterPreview({ cosmetic }: { cosmetic: Cosmetic }) {
     >
       {/* bright, flat cartoon lighting */}
       <ambientLight intensity={0.95} />
-      <directionalLight position={[3, 6, 4]} intensity={1.05} color="#ffffff" castShadow shadow-mapSize={[1024, 1024]} />
+      <directionalLight
+        position={[3, 6, 4]}
+        intensity={1.05}
+        color="#ffffff"
+        castShadow
+        shadow-mapSize={[1024, 1024]}
+      />
       <directionalLight position={[-4, 3, -2]} intensity={0.4} color="#cfe4ff" />
       <pointLight position={[0, 2.4, 2.5]} intensity={0.3} color="#ffffff" />
 
@@ -263,7 +285,14 @@ export function CharacterPreview({ cosmetic }: { cosmetic: Cosmetic }) {
           <meshStandardMaterial color="#38a3ff" metalness={0.1} roughness={0.6} />
         </mesh>
       </group>
-      <ContactShadows position={[0, -0.14, 0]} opacity={0.32} scale={4} blur={2.8} far={3} color="#5b7da6" />
+      <ContactShadows
+        position={[0, -0.14, 0]}
+        opacity={0.32}
+        scale={4}
+        blur={2.8}
+        far={3}
+        color="#5b7da6"
+      />
 
       <OrbitControls
         autoRotate

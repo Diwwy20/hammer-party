@@ -51,7 +51,9 @@ function SplashScreen() {
           <span className="progress__pct">{Math.round(pct)}%</span>
         </div>
 
-        <p className="tip"><span className="tip__k">เกร็ด</span> {tip}</p>
+        <p className="tip">
+          <span className="tip__k">เกร็ด</span> {tip}
+        </p>
       </div>
     </div>
   );
@@ -62,8 +64,8 @@ function ErrorScreen() {
   return (
     <div className="screen">
       <div className="center-col">
-        <div className="panel" style={{ textAlign: "center" }}>
-          <p className="error-text" style={{ marginBottom: 16 }}>{error ?? "เกิดข้อผิดพลาด"}</p>
+        <div className="panel text-center">
+          <p className="error-text mb-4">{error ?? "เกิดข้อผิดพลาด"}</p>
           <button className="btn btn--gold" onClick={leaveRoom}>
             กลับหน้าเข้าห้อง
           </button>

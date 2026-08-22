@@ -8,13 +8,24 @@ description: The agreed UI look, wording, and front-end structure for Hammer Par
 ## Visual style — cartoon minimal (locked)
 Bright, friendly, uncluttered. **NOT** the old dark/fantasy gold theme (removed).
 - **Background:** light sky gradient + soft white bubbles.
-- **Cards:** white, big rounded corners, soft shadow, 2px light border.
+- **Cards:** white, big rounded corners (22px), soft shadow, 2px light border.
 - **Buttons:** chunky "candy" style with a **bottom lip** (`box-shadow: 0 5px 0 <darker>`), press = `translateY(4px)`.
-- **Fonts:** display/headings/buttons = **Baloo Thai 2** (rounded, bold); body = **Sarabun**. Loaded from Google Fonts in `index.html` (self-host in Phase 04 for offline).
+- **Fonts:** display/headings/buttons = **Baloo Thai 2** (rounded, bold); body = **Sarabun**. Google Fonts in `index.html` (self-host in Phase 04 for offline).
 - **Swatches:** glossy colored balls. **Tabs:** rounded pills.
-- Everything lives in `client/src/styles.css` `:root` tokens (`--sky-*`, `--blue`, `--green`, `--coral`, `--ink`, `--radius`, …).
 
-> ⚠️ CSS class names are legacy tokens — `btn--gold` is now **blue** (primary), `btn--jade` = green (ready/confirm), `btn--danger` = coral. **Don't rename them**, just restyle. Reuse existing classes (`panel`, `pill`, `stage`, `opt`, `tab`, `chip`, `roster-strip`, `actionbar`, `hud`, …).
+## Styling stack — Tailwind v4 + shadcn (Base UI)
+The whole client is **Tailwind CSS** now. `styles.css` holds only:
+- `@theme { … }` — our design tokens as Tailwind theme → utilities `bg-blue`/`text-ink`/`border-line`/`bg-surface`/`rounded-card`/`rounded-btn`/`font-display`/`shadow-soft`/`animate-bob`, etc. (colors are `--color-*`, radii `--radius-*`).
+- `@layer components { … }` — `@apply` recipes for the repeated atoms (`.screen`, `.panel`, `.btn`+variants, `.pill`, `.chip`, `.input`, `.opt`, `.tab`, `.stage`, `.hero-title`, `.customizer`, `.roster-strip`, `.actionbar`, `.hud`, `.progress`, …). Exotic bits (gradients, `-webkit-text-stroke`, button-lip `box-shadow`, `::before` bubbles) stay raw inside those recipes.
+- `@keyframes bob` (+ Tailwind's `animate-spin`) and the shadcn token blocks (`:root`, `.dark`, `@theme inline`, `@layer base`).
+
+**How to style going forward:**
+- New UI → **Tailwind utility classes in JSX** (prefer this). Repeated atoms → an `@apply` recipe.
+- **No inline `style={}`** except genuinely dynamic values (per-item colors from `PLAYER_COLORS`, progress width %, the swatch gradient).
+- Prettier + `prettier-plugin-tailwindcss` auto-sorts classes on format (`tailwindStylesheet` points at `styles.css`).
+- shadcn (Base UI, **not Radix**) is set up: add components with `pnpm dlx shadcn@latest add <name>`; base button at `components/ui/button.tsx`, `cn()` at `lib/utils.ts`, config in `components.json`. Alias `@/*` → `src/`.
+
+> ⚠️ Class names are legacy tokens — `btn--gold` is now **blue** (primary), `btn--jade` = green (ready), `btn--danger` = coral. **Don't rename them.** Also `.grid-cards` (not `.grid`, which is a Tailwind utility). shadcn writes its radius scale off `--radius: 22px` — keep it.
 
 ## Wording (locked)
 - Say **"Host"** in copy — never "เจ้าภาพ".

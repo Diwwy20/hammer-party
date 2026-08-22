@@ -6,7 +6,10 @@ import { connect } from "../net/session";
 function readUrl() {
   const q = new URLSearchParams(location.search);
   return {
-    code: (q.get("room") ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, ROOM_CODE_LENGTH),
+    code: (q.get("room") ?? "")
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "")
+      .slice(0, ROOM_CODE_LENGTH),
     host: q.has("host"),
   };
 }
@@ -44,7 +47,7 @@ export function JoinScreen() {
         {url.host ? (
           <div className="panel">
             <p className="panel__title">เปิดจอ Host</p>
-            <p className="muted" style={{ marginBottom: 16, lineHeight: 1.6 }}>
+            <p className="muted mb-4 leading-relaxed">
               สร้างห้องแล้วฉายจอนี้ขึ้นจอใหญ่ ผู้เล่นสแกน QR เข้าร่วมได้ทันที
             </p>
             <button className="btn btn--gold" onClick={hostRoom}>
@@ -69,7 +72,7 @@ export function JoinScreen() {
             </label>
 
             {knewCode && !editCode ? (
-              <div className="row" style={{ justifyContent: "space-between", marginBottom: 14 }}>
+              <div className="row mb-[14px] justify-between">
                 <span className="pill pill--code">⚔ ห้อง {code}</span>
                 <button className="link-btn" onClick={() => setEditCode(true)}>
                   เข้าห้องอื่น?
@@ -90,7 +93,7 @@ export function JoinScreen() {
               </label>
             )}
 
-            {err && <p className="error-text" style={{ marginBottom: 12 }}>{err}</p>}
+            {err && <p className="error-text mb-3">{err}</p>}
 
             <button className="btn btn--gold" onClick={joinAsPlayer}>
               ⚔ เข้าเล่น

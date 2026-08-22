@@ -72,7 +72,7 @@ export function GameScreen() {
       </Canvas>
       <div className="hud">
         <b>⚔ กำลังประลอง</b> · {count} คน
-        <div className="muted" style={{ fontSize: 11 }}>movement/combat มาเฟสถัดไป</div>
+        <div className="muted text-[11px]">movement/combat มาเฟสถัดไป</div>
       </div>
     </>
   );

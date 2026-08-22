@@ -25,38 +25,49 @@ export function HostScreen() {
         <span className="brand">
           <span className="emoji">🔨</span> HAMMER PARTY <small>· จอ Host</small>
         </span>
-        <span className="pill">⚔ {ids.length}/{MAX_PLAYERS} · พร้อม {readyCount}</span>
+        <span className="pill">
+          ⚔ {ids.length}/{MAX_PLAYERS} · พร้อม {readyCount}
+        </span>
       </div>
 
       <div className="screen__scroll">
-        <div className="row" style={{ alignItems: "stretch", gap: 22, width: "100%", maxWidth: 980 }}>
+        <div className="row w-full max-w-[980px] items-stretch gap-[22px]">
           {/* invite */}
-          <div className="panel" style={{ flex: "1 1 300px", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center" }}>
-            <p className="panel__title" style={{ justifyContent: "center" }}>สแกนเพื่อเข้าร่วม</p>
-            <div className="qr-card" style={{ width: "fit-content", margin: "4px auto 16px" }}>
-              <QRCodeSVG value={joinUrl} size={210} level="M" bgColor="transparent" fgColor="#1a1206" />
+          <div className="panel flex flex-[1_1_300px] flex-col items-center text-center">
+            <p className="panel__title justify-center">สแกนเพื่อเข้าร่วม</p>
+            <div className="qr-card mx-auto mt-1 mb-4 w-fit">
+              <QRCodeSVG
+                value={joinUrl}
+                size={210}
+                level="M"
+                bgColor="transparent"
+                fgColor="#1a1206"
+              />
             </div>
             <div className="code-big">{code || "----"}</div>
-            <p className="muted" style={{ marginTop: 10 }}>{joinUrl}</p>
+            <p className="muted mt-[10px]">{joinUrl}</p>
           </div>
 
           {/* roster */}
-          <div className="panel" style={{ flex: "2 1 400px" }}>
+          <div className="panel flex-[2_1_400px]">
             <p className="panel__title">
               <span>ผู้ท้าชิง</span>
-              <span className="muted">{ids.length}/{MAX_PLAYERS}</span>
+              <span className="muted">
+                {ids.length}/{MAX_PLAYERS}
+              </span>
             </p>
             {ids.length === 0 ? (
-              <p className="muted" style={{ padding: "24px 0", textAlign: "center" }}>
-                ยังไม่มีผู้ท้าชิง — ให้ทุกคนสแกน QR ทางซ้าย
-              </p>
+              <p className="muted py-6 text-center">ยังไม่มีผู้ท้าชิง — ให้ทุกคนสแกน QR ทางซ้าย</p>
             ) : (
-              <div className="grid">
+              <div className="grid-cards">
                 {ids.map((id) => {
                   const p = players[id];
                   return (
                     <div key={id} className={"card" + (p.ready ? " card--ready" : "")}>
-                      <span className="chip__dot" style={{ background: PLAYER_COLORS[p.colorIndex] ?? PLAYER_COLORS[0] }}>
+                      <span
+                        className="chip__dot"
+                        style={{ background: PLAYER_COLORS[p.colorIndex] ?? PLAYER_COLORS[0] }}
+                      >
                         {p.ready ? "✓" : ""}
                       </span>
                       <span className="chip__name">{p.name}</span>
@@ -68,19 +79,19 @@ export function HostScreen() {
           </div>
         </div>
 
-        <p className="muted" style={{ textAlign: "center" }}>
+        <p className="muted text-center">
           ⚙ เลือด {HP_MAX} · เวลาสูงสุด {MATCH_MAX_MINUTES} นาที
-          <span style={{ opacity: 0.6 }}> (ปรับได้ทีหลัง)</span>
+          <span className="opacity-60"> (ปรับได้ทีหลัง)</span>
         </p>
       </div>
 
       <div className="actionbar">
-        <button className="btn btn--gold" disabled={!canStart} onClick={sendStart} style={{ maxWidth: 520 }}>
+        <button className="btn btn--gold max-w-[520px]" disabled={!canStart} onClick={sendStart}>
           {ids.length < MIN_PLAYERS_TO_START
             ? `รอผู้ท้าชิง (อย่างน้อย ${MIN_PLAYERS_TO_START})`
             : "✦ เริ่มการประลอง"}
         </button>
-        <button className="btn btn--ghost" style={{ maxWidth: 200 }} onClick={leaveRoom}>
+        <button className="btn btn--ghost max-w-[200px]" onClick={leaveRoom}>
           ปิดห้อง
         </button>
       </div>

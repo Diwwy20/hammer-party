@@ -14,7 +14,12 @@ export function LobbyScreen() {
   const others = ids.filter((id) => id !== sessionId);
   const me = sessionId ? players[sessionId] : undefined;
   const myCos: Cosmetic = me
-    ? { colorIndex: me.colorIndex, hatIndex: me.hatIndex, faceIndex: me.faceIndex, backIndex: me.backIndex }
+    ? {
+        colorIndex: me.colorIndex,
+        hatIndex: me.hatIndex,
+        faceIndex: me.faceIndex,
+        backIndex: me.backIndex,
+      }
     : FALLBACK_COSMETIC;
   const amReady = !!me?.ready;
   const readyCount = ids.filter((id) => players[id].ready).length;
@@ -22,23 +27,29 @@ export function LobbyScreen() {
   return (
     <div className="screen">
       <div className="topbar">
-        <span className="brand"><span className="emoji">🔨</span> HAMMER PARTY</span>
-        <span className="row" style={{ gap: 8 }}>
+        <span className="brand">
+          <span className="emoji">🔨</span> HAMMER PARTY
+        </span>
+        <span className="row gap-2">
           <span className="pill pill--code">{code || "----"}</span>
-          <span className="pill">⚔ {ids.length}/{MAX_PLAYERS}</span>
+          <span className="pill">
+            ⚔ {ids.length}/{MAX_PLAYERS}
+          </span>
         </span>
       </div>
 
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 10, padding: "10px 16px 0", minHeight: 0 }}>
-        <p className="status-line" style={{ fontSize: 14 }}>
+      <div className="flex min-h-0 flex-1 flex-col gap-[10px] px-4 pt-[10px]">
+        <p className="status-line text-sm">
           {hostSessionId ? (
-            <>รอ <span className="glow">Host</span> เริ่มการประลอง · พร้อม {readyCount}/{ids.length}</>
+            <>
+              รอ <span className="glow">Host</span> เริ่มการประลอง · พร้อม {readyCount}/{ids.length}
+            </>
           ) : (
             <>รอ Host เข้าห้อง…</>
           )}
         </p>
 
-        <div className="stage" style={{ minHeight: 200 }}>
+        <div className="stage min-h-[200px]">
           <div className="stage__canvas">
             <CharacterPreview cosmetic={myCos} />
           </div>
@@ -52,7 +63,9 @@ export function LobbyScreen() {
         <Customizer cosmetic={myCos} />
 
         <div className="roster-strip">
-          <span className="roster-strip__count">👥 ในห้อง {ids.length}/{MAX_PLAYERS}</span>
+          <span className="roster-strip__count">
+            👥 ในห้อง {ids.length}/{MAX_PLAYERS}
+          </span>
           <div className="roster-strip__row">
             {others.length === 0 ? (
               <span className="muted">ยังไม่มีผู้เล่นอื่น รอเพื่อนสแกนเข้ามา…</span>
@@ -61,7 +74,10 @@ export function LobbyScreen() {
                 const p = players[id];
                 return (
                   <span key={id} className={"chip" + (p.ready ? " chip--ready" : "")}>
-                    <span className="chip__dot" style={{ background: PLAYER_COLORS[p.colorIndex] ?? PLAYER_COLORS[0] }}>
+                    <span
+                      className="chip__dot"
+                      style={{ background: PLAYER_COLORS[p.colorIndex] ?? PLAYER_COLORS[0] }}
+                    >
                       {p.ready ? "✓" : ""}
                     </span>
                     <span className="chip__name">{p.name}</span>
@@ -74,10 +90,13 @@ export function LobbyScreen() {
       </div>
 
       <div className="actionbar">
-        <button className={"btn " + (amReady ? "btn--danger" : "btn--jade")} onClick={() => sendReady(!amReady)}>
+        <button
+          className={"btn " + (amReady ? "btn--danger" : "btn--jade")}
+          onClick={() => sendReady(!amReady)}
+        >
           {amReady ? "ยกเลิกความพร้อม" : "✦ พร้อมประลอง!"}
         </button>
-        <button className="btn btn--ghost" style={{ maxWidth: 200 }} onClick={leaveRoom}>
+        <button className="btn btn--ghost max-w-[200px]" onClick={leaveRoom}>
           ออกจากห้อง
         </button>
       </div>

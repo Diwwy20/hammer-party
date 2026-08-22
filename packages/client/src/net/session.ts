@@ -85,6 +85,7 @@ export function leaveRoom(): void {
 function friendlyError(e: unknown): string {
   const msg = String((e as { message?: string })?.message ?? e ?? "");
   if (msg.includes("room-full")) return "ห้องเต็มแล้ว (สูงสุด 25 คน)";
-  if (/not found|no rooms|seat|matchmak/i.test(msg)) return "ไม่พบห้องรหัสนี้ — ลองตรวจโค้ดอีกครั้ง";
+  if (/not found|no rooms|seat|matchmak/i.test(msg))
+    return "ไม่พบห้องรหัสนี้ — ลองตรวจโค้ดอีกครั้ง";
   return "เชื่อมต่อไม่สำเร็จ ลองใหม่อีกครั้ง";
 }
