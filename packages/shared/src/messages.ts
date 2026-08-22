@@ -1,4 +1,4 @@
-import type { HammerKind } from "./constants";
+import type { HammerKind, PrankKind } from "./constants";
 
 /**
  * Client → server messages. The server is authoritative: the client only sends
@@ -17,8 +17,15 @@ export const ClientMsg = {
   Restart: "restart",
   /** Host-only: trigger a random event (Golden Hammer / Heal orbs). */
   Event: "event",
+  /** Dead-player only: throw a prank (banana/bomb) at a random survivor. */
+  Prank: "prank",
 } as const;
 export type ClientMsg = (typeof ClientMsg)[keyof typeof ClientMsg];
+
+/** Dead player → server: lob a prank at a random survivor. */
+export interface PrankMessage {
+  kind: PrankKind;
+}
 
 /** Random events the Host can trigger (also fire automatically mid-match). */
 export type EventKind = "golden" | "heal";
@@ -37,8 +44,15 @@ export const ServerMsg = {
   Swing: "swing",
   Hit: "hit",
   Died: "died",
+  Prank: "prank",
 } as const;
 export type ServerMsg = (typeof ServerMsg)[keyof typeof ServerMsg];
+
+/** A prank landed on `id` (play the banana-slip / bomb-pop FX above them). */
+export interface PrankEvent {
+  id: string;
+  kind: PrankKind;
+}
 
 /** A player swung their hammer (play the swing animation for `id`). */
 export interface SwingEvent {

@@ -3,25 +3,19 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Grid, Html, OrbitControls } from "@react-three/drei";
 import type { Group, Mesh } from "three";
 import nipplejs from "nipplejs";
-import {
-  HAMMERS,
-  HP_MAX,
-  INPUT_SEND_HZ,
-  MOVE_SPEED,
-  PLAYER_COLORS,
-  PLAYER_RADIUS,
-  type HammerKind,
-} from "@hammer/shared";
+import { HAMMERS, HP_MAX, INPUT_SEND_HZ, MOVE_SPEED, PLAYER_RADIUS, type HammerKind } from "@hammer/shared";
 import { useGame, type PickupView } from "../store";
-import { leaveRoom, sendAttack, sendEvent, sendInput, sendRestart } from "../net/session";
+import { leaveRoom, sendAttack, sendEvent, sendInput, sendPrank, sendRestart } from "../net/session";
 import { latest, sampleOther } from "../net/movement";
-import { markSwing, selfStat, swingAt } from "../net/combat";
+import { markSwing, prankAt, selfStat, swingAt } from "../net/combat";
+import { AvatarBody } from "../three/cosmetics";
+import { sfx } from "../audio";
 
 type Vec = { dx: number; dz: number };
 type Self = { x: number; z: number; dir: number; ready: boolean };
 
-/** First-person eye height (m). Just above the avatar's head. */
-const EYE_HEIGHT = 1.5;
+/** First-person eye height (m). At the avatar's head level. */
+const EYE_HEIGHT = 2.05;
 /** Swing animation length (ms). Purely visual; the server owns the real cooldown. */
 const SWING_MS = 300;
 
@@ -49,13 +43,18 @@ function PlayerAvatar({
   const tip = useRef<Group>(null);
   const hammer = useRef<Group>(null);
   const dead = useRef(0);
+  const prankRef = useRef<HTMLDivElement>(null);
 
-  const color = useGame((s) => PLAYER_COLORS[s.players[id]?.colorIndex ?? 1]);
   const name = useGame((s) => s.players[id]?.name ?? "");
   const hp = useGame((s) => s.players[id]?.hp ?? HP_MAX);
   const alive = useGame((s) => s.players[id]?.alive ?? true);
   const connected = useGame((s) => s.players[id]?.connected ?? true);
   const hammerKind = useGame((s) => s.players[id]?.hammer ?? "mid");
+  const colorIndex = useGame((s) => s.players[id]?.colorIndex ?? 1);
+  const hatIndex = useGame((s) => s.players[id]?.hatIndex ?? 0);
+  const faceIndex = useGame((s) => s.players[id]?.faceIndex ?? 0);
+  const backIndex = useGame((s) => s.players[id]?.backIndex ?? 0);
+  const cos = { colorIndex, hatIndex, faceIndex, backIndex };
 
   useFrame((_, dt) => {
     const grp = g.current;
@@ -75,7 +74,7 @@ function PlayerAvatar({
     dead.current += ((alive ? 0 : 1) - dead.current) * (1 - Math.exp(-dt * 6));
     if (tip.current) {
       tip.current.rotation.z = dead.current * 1.45;
-      tip.current.position.y = -dead.current * 0.3;
+      tip.current.position.y = -dead.current * 0.5;
     }
 
     if (hammer.current) {
@@ -83,6 +82,17 @@ function PlayerAvatar({
       const t = started > 0 ? (performance.now() - started) / SWING_MS : 2;
       const strike = t >= 0 && t <= 1 ? Math.sin(t * Math.PI) : 0;
       hammer.current.rotation.x = -0.5 - strike * 1.95;
+    }
+
+    if (prankRef.current) {
+      const pk = prankAt[id];
+      const age = pk ? performance.now() - pk.t : 9999;
+      if (age < 1200) {
+        prankRef.current.textContent = pk!.kind === "banana" ? "🍌" : "💣";
+        prankRef.current.style.opacity = String(1 - age / 1200);
+      } else if (prankRef.current.style.opacity !== "0") {
+        prankRef.current.style.opacity = "0";
+      }
     }
   });
 
@@ -92,29 +102,11 @@ function PlayerAvatar({
   return (
     <group ref={g}>
       <group ref={tip}>
-        {!fpSelf && (
-          <>
-            <mesh position={[0, 0.62, 0]} castShadow>
-              <boxGeometry args={[0.7, 0.9, 0.5]} />
-              <meshStandardMaterial
-                color={color}
-                emissive={isMe ? color : "#000000"}
-                emissiveIntensity={isMe ? 0.25 : 0}
-              />
-            </mesh>
-            <mesh position={[0, 1.25, 0]} castShadow>
-              <boxGeometry args={[0.44, 0.42, 0.44]} />
-              <meshStandardMaterial color="#f0c9a0" />
-            </mesh>
-            <mesh position={[0, 1.25, 0.26]}>
-              <boxGeometry args={[0.14, 0.14, 0.08]} />
-              <meshStandardMaterial color="#ffffff" />
-            </mesh>
-          </>
-        )}
+        {/* full cosmetic avatar (hidden for your own first-person view) */}
+        {!fpSelf && <AvatarBody cosmetic={cos} isMe={isMe} />}
 
         {/* held hammer (also the first-person view-model); glows gold with the power weapon */}
-        <group ref={hammer} position={[0.34, 1.02, 0.16]}>
+        <group ref={hammer} position={[0.48, 1.12, 0.32]}>
           <mesh position={[0, 0.34, 0]} castShadow>
             <cylinderGeometry args={[0.05, 0.05, 0.8, 8]} />
             <meshStandardMaterial color="#5a3a1e" />
@@ -133,7 +125,7 @@ function PlayerAvatar({
       </group>
 
       {!fpSelf && (
-        <Html position={[0, 1.85, 0]} center distanceFactor={15} zIndexRange={[10, 0]} className="pointer-events-none">
+        <Html position={[0, 2.7, 0]} center distanceFactor={15} zIndexRange={[10, 0]} className="pointer-events-none">
           <div className="flex flex-col items-center gap-0.5" style={{ opacity: connected ? 1 : 0.45 }}>
             <div className="whitespace-nowrap rounded-full bg-white/85 px-2 py-0.5 text-xs font-bold text-ink shadow">
               {alive ? name : `💀 ${name}`}
@@ -153,6 +145,12 @@ function PlayerAvatar({
               </div>
             )}
           </div>
+        </Html>
+      )}
+
+      {!fpSelf && (
+        <Html position={[0, 3.35, 0]} center distanceFactor={16} zIndexRange={[11, 0]} className="pointer-events-none">
+          <div ref={prankRef} className="text-3xl" style={{ opacity: 0 }} />
         </Html>
       )}
     </group>
@@ -326,7 +324,7 @@ function World({
     const cx = self.current.x;
     const cz = self.current.z;
     state.camera.position.set(cx, EYE_HEIGHT, cz);
-    state.camera.lookAt(cx + fx * 6, 0.6, cz + fz * 6);
+    state.camera.lookAt(cx + fx * 6, 1.0, cz + fz * 6);
   });
 
   return (
@@ -416,6 +414,7 @@ function AttackButton({ sessionId }: { sessionId?: string }) {
   };
   const start = (e: React.PointerEvent) => {
     e.preventDefault();
+    sfx.swing();
     swing();
     stop();
     timer.current = window.setInterval(swing, 130);
@@ -437,18 +436,33 @@ function AttackButton({ sessionId }: { sessionId?: string }) {
   );
 }
 
-/** Champion / spectate card shown when the match ends. */
+interface Award {
+  icon: string;
+  label: string;
+  name: string;
+  detail: string;
+}
+
+/** Champion + funny awards shown when the match ends. */
 function ResultsOverlay() {
   const winnerId = useGame((s) => s.winnerId);
   const sessionId = useGame((s) => s.sessionId);
   const isHost = useGame((s) => s.isHost);
   const winnerName = useGame((s) => (s.winnerId ? (s.players[s.winnerId]?.name ?? "") : ""));
+  const awardsJson = useGame((s) => s.awardsJson);
   const iWon = !!sessionId && winnerId === sessionId;
 
+  let awards: Award[] = [];
+  try {
+    if (awardsJson) awards = JSON.parse(awardsJson);
+  } catch {
+    awards = [];
+  }
+
   return (
-    <div className="fixed inset-0 z-20 grid place-items-center bg-ink/35 px-5 backdrop-blur-sm">
-      <div className="panel text-center">
-        <div className="mb-2 text-[54px]">🏆</div>
+    <div className="fixed inset-0 z-20 grid place-items-center overflow-y-auto bg-ink/40 px-5 py-8 backdrop-blur-sm">
+      <div className="panel max-w-[520px] text-center">
+        <div className="mb-1 text-[54px]">🏆</div>
         <h2 className="mb-1 font-display text-2xl font-extrabold text-ink">
           {winnerName ? `${winnerName} ชนะ!` : "จบเกม"}
         </h2>
@@ -459,6 +473,22 @@ function ResultsOverlay() {
               ? "คุณคือคนสุดท้ายที่รอด! 🎉"
               : "รอบนี้คุณตกรอบ — รอโฮสต์เริ่มรอบใหม่"}
         </p>
+
+        {awards.length > 0 && (
+          <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {awards.map((a, i) => (
+              <div key={i} className="flex items-center gap-3 rounded-field border-2 border-line bg-surface-2 px-3 py-2 text-left">
+                <span className="text-2xl">{a.icon}</span>
+                <div className="min-w-0">
+                  <div className="text-[11px] font-semibold text-ink-soft">{a.label}</div>
+                  <div className="truncate font-display font-bold text-ink">{a.name}</div>
+                  {a.detail && <div className="text-[11px] text-ink-faint">{a.detail}</div>}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         {isHost ? (
           <button className="btn btn--jade" onClick={sendRestart}>
             เริ่มรอบใหม่
@@ -491,6 +521,31 @@ export function GameScreen() {
   const canControl = !isHost && meAlive && playing;
   const ratio = Math.max(0, Math.min(1, meHp / HP_MAX));
   const hammerLabel = HAMMERS[meHammer as HammerKind]?.label ?? meHammer;
+
+  // SFX on local-player events (host's constant values never change, so it only
+  // hears the win fanfare — which is what the big screen wants)
+  const prevHp = useRef(meHp);
+  const prevHammer = useRef(meHammer);
+  const prevAlive = useRef(meAlive);
+  const prevPhase = useRef(phase);
+  useEffect(() => {
+    if (meAlive && meHp < prevHp.current - 0.5) sfx.hit();
+    prevHp.current = meHp;
+  }, [meHp, meAlive]);
+  useEffect(() => {
+    if (meHammer !== prevHammer.current) {
+      sfx.pickup();
+      prevHammer.current = meHammer;
+    }
+  }, [meHammer]);
+  useEffect(() => {
+    if (prevAlive.current && !meAlive) sfx.die();
+    prevAlive.current = meAlive;
+  }, [meAlive]);
+  useEffect(() => {
+    if (phase === "ended" && prevPhase.current !== "ended") sfx.win();
+    prevPhase.current = phase;
+  }, [phase]);
 
   // out-of-zone warning — polls the game loop's self radius (no per-frame re-render)
   const [outside, setOutside] = useState(false);
@@ -537,6 +592,18 @@ export function GameScreen() {
         </div>
       )}
 
+      {/* Dead player: prank the survivors (harass, never kill) */}
+      {!isHost && !meAlive && playing && (
+        <div className="fixed bottom-6 left-1/2 z-20 flex -translate-x-1/2 gap-2">
+          <button className="pill" onClick={() => sendPrank("banana")}>
+            🍌 กล้วย
+          </button>
+          <button className="pill" onClick={() => sendPrank("bomb")}>
+            💣 ระเบิด
+          </button>
+        </div>
+      )}
+
       <div className="hud">
         <div>
           <b>⚔ กำลังประลอง</b> · {aliveCount} รอด
@@ -550,7 +617,9 @@ export function GameScreen() {
             <span className="text-[11px] font-bold">{Math.ceil(meHp)}</span>
           </div>
         )}
-        {!isHost && !meAlive && playing && <div className="muted mt-1 text-[11px]">☠️ คุณตกรอบแล้ว — หมุนดูสนามได้</div>}
+        {!isHost && !meAlive && playing && (
+          <div className="muted mt-1 text-[11px]">☠️ ตกรอบแล้ว — หมุนดูสนาม + ป่วนคนที่ยังรอดได้!</div>
+        )}
         {isHost && <div className="muted text-[11px]">มุมมองเจ้าภาพ · ลากเพื่อหมุนกล้อง</div>}
       </div>
 

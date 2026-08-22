@@ -31,16 +31,21 @@ Distilled project knowledge lives in `.claude/skills/`. Load only what a task ne
     (`allowReconnection` + client `reconnect`). Combat FX (swing/hit) broadcast, not synced —
     see `client/src/net/combat.ts`.
 - **Phase 03** (Arena · Zone · Weapons) — **done**.
-  - **Stage-as-config** in `packages/shared/src/stages.ts` (`{radius, spawnRadius, zone, weaponSpawns, wallSlam, theme}`);
-    server reads the active stage — future maps swap data, not combat code.
-  - **Shrinking safe zone** (`zoneRadiusAt`, eases-in / accelerates late to force a finish); out-of-zone HP bleed;
-    client renders lava floor revealed under the shrinking safe disc + out-of-zone warning.
-  - **Weapon pickups** (Fast/Heavy, respawn on a timer) swap your hammer; **wall-slam** (knockback into the wall = extra dmg + stun).
-  - **Events**: Golden Hammer (center, ~one-shot) + Heal orbs, auto-fired mid-match and **Host-triggerable**; transient `eventBanner`.
-    New synced state: `Pickup` map, `GameState.zoneRadius/stageId/stageTheme/eventBanner`. Verified with headless smokes + in-browser run.
-  - ⚠️ Still owed: a **real ~25-device load test** (fps/latency) before the event (Phase 04);
-    reconnection is wired but not yet tested on real flaky wifi.
-- **Phase 04 (Juice · Cosmetics · Polish) is next.** Phase 05 not started.
+  - **Stage-as-config** in `packages/shared/src/stages.ts` (`{radius, spawnRadius, zone, weaponSpawns, wallSlam, theme}`).
+  - **Shrinking safe zone** (`zoneRadiusAt`, accelerates late) + out-of-zone HP bleed; **weapon pickups** (Fast/Heavy);
+    **wall-slam**; **events** (Golden Hammer + Heal orbs, auto + Host-triggerable) with `eventBanner`.
+- **Phase 04** (Juice · Cosmetics · Polish) — **done**.
+  - **First-person retune** + **cosmetics on in-game avatars** (shared meshes in `client/src/three/cosmetics.tsx`, used by lobby + arena).
+  - **Awards + full Results**: server tracks kills/damage/wall-slams/first-blood/survival → `GameState.awardsJson`;
+    Results shows champion + funny award cards (Most Kills · First Blood · Longest Survivor · Pacifist · Most Wall-slams).
+  - **Zod validation + name filter** (`packages/server/src/validate.ts`) — thin server-edge schemas + profanity mask.
+  - **Dead-player prank throws** (banana slip / small bomb at a random survivor; harass, never kill) — `ClientMsg.Prank`.
+  - **Self-hosted fonts** for offline: **Mali** (display) + **Sarabun** (body) in `client/public/fonts/` — the old `"Baloo Thai 2"`
+    was a **nonexistent Google font** that silently fell back; picked Mali as the rounded Thai display font.
+  - **SFX**: synthesized WebAudio (no assets, offline) — `client/src/audio.ts`. Verified with headless smokes + in-browser run.
+  - ⚠️ Still owed (event hardening): a **real ~25-device load test** (fps/latency) and a full dress rehearsal + LAN fallback;
+    reconnection is wired but untested on real flaky wifi.
+- **Phase 05 (Post-event: stages via config + DB leaderboard) is the last, optional phase.**
 - Styling is **Tailwind v4 + shadcn (Base UI)** — see `ui-conventions`.
 
 ## 🔑 Non-negotiable rules

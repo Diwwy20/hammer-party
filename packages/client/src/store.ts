@@ -27,6 +27,7 @@ export interface PlayerView {
   hammer: string;
   stunned: boolean;
   connected: boolean;
+  kills: number;
 }
 
 /** A map collectible mirrored out of room.state (weapon or event item). */
@@ -67,6 +68,7 @@ interface GameStore {
   zoneRadius: number;
   stageTheme: string;
   eventBanner: string;
+  awardsJson: string;
 
   set: (patch: Partial<GameStore>) => void;
   reset: () => void;
@@ -89,6 +91,7 @@ const initial = {
   zoneRadius: ARENA_RADIUS,
   stageTheme: "",
   eventBanner: "",
+  awardsJson: "",
 };
 
 export const useGame = create<GameStore>((set) => ({

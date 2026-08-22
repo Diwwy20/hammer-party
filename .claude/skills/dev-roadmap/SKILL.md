@@ -51,10 +51,19 @@ Shrinking zone (out-of-zone HP bleed, eases-in to force a finish ~12min, well un
 - Trimmed per "keep events few": meteor/low-gravity/speed-buff/comeback + hazard-wall props deferred (speed buff needs synced move-speed for client prediction). Dead-player event voting is Phase 04.
 ✅ Done when a match plays end-to-end with the zone forcing a finish; pickups + events work.
 
-## → NEXT: Phase 04 (Juice · Cosmetics · Polish)
+## Phase 04 — Juice · Cosmetics · Polish ✅
+Cosmetics on in-game avatars, full Results/awards, Zod input validation + name filter, dead-player prank throws, SFX, self-host fonts for offline.
+- **Cosmetics finished**: shared procedural meshes in `client/src/three/cosmetics.tsx` (`Hat/Face/Back/AvatarBody`), used by both the lobby `CharacterPreview` and the arena avatars (first-person eye height retuned to the full-size body).
+- **Awards**: server tracks kills (`Player.kills`) + damage/wall-slams/first-blood/survival (server-only), computes 5 awards at end → `GameState.awardsJson`; Results overlay renders champion + award cards.
+- **Zod + name filter**: `packages/server/src/validate.ts` — thin `safeParse` on input/ready/cosmetic/event/prank + `cleanName` (control-strip, clamp, profanity mask). `zod` added to `@hammer/server`.
+- **Pranks**: dead players lob banana (slip)/bomb (small dmg, floored so never lethal) at a random survivor — `ClientMsg.Prank`, `ServerMsg.Prank` FX. Buttons show for dead players.
+- **Fonts self-hosted** in `client/public/fonts/` (+ `public/fonts.css`, linked from `index.html`): **Mali** (display) + **Sarabun** (body). ⚠️ `"Baloo Thai 2"` was never a real Google font — it silently fell back; Mali chosen as the rounded Thai display face (owner deferred the pick).
+- **SFX**: synthesized WebAudio in `client/src/audio.ts` (no asset files → offline).
+- Verified: headless smokes (pranks: only-dead-can-throw + harass-not-kill; awards populate with correct winners) + in-browser run (fonts load, name masked, no console errors).
+- ⚠️ **Still owed (do at the event):** a real ~25-device load test (fps/latency) + full dress rehearsal + LAN fallback; reconnection untested on flaky wifi. glTF models skipped (procedural is fine).
+✅ Done when a match plays to Results with awards; cosmetics show in-arena; the build runs offline.
 
-## Phase 04 — Juice · Cosmetics · Polish ⬜
-Finish cosmetics (glTF?), full Results/awards, Zod input validation + name filter, dead-player prank throws, SFX, **self-host fonts for offline**, full 25-device dress rehearsal + event-day fallback (LAN, quick restart).
+## → NEXT: Phase 05 (Post-event — optional)
 
 ## Phase 05 — Post-event (optional, cut if short on time) ⬜
 New stages via config; DB stats + monthly leaderboard (TanStack Query enters here).

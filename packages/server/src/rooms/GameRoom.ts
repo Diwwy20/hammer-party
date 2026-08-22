@@ -19,24 +19,24 @@ import {
   PICKUP_RADIUS,
   PLAYER_COLORS,
   PLAYER_RADIUS,
+  PRANK,
   RECONNECT_SECONDS,
   ServerMsg,
   STAGES,
   TICK_RATE,
   WEAPON_RESPAWN_MS,
   zoneRadiusAt,
-  type CosmeticMessage,
   type DiedEvent,
   type EventKind,
-  type EventMessage,
   type HammerKind,
   type HitEvent,
-  type InputMessage,
   type JoinOptions,
-  type ReadyMessage,
+  type PrankEvent,
+  type PrankKind,
   type StageConfig,
   type SwingEvent,
 } from "@hammer/shared";
+import { cleanName, cosmeticSchema, eventSchema, inputSchema, prankSchema, readySchema } from "../validate";
 
 /** Per-player simulation state kept OUT of the synced schema (server-only). */
 interface CombatState {
@@ -45,8 +45,31 @@ interface CombatState {
   stunUntil: number; // frozen until this Date.now()
   lastAttackAt: number; // cooldown gate
   lastSlamAt: number; // wall-slam debounce
-  kills: number;
+  lastPrankAt: number; // spectator prank cooldown
+  damageDealt: number; // total dmg dealt (awards: pacifist)
+  wallSlamsTaken: number; // times slammed into a wall (awards)
+  diedAtMs: number; // elapsedMs when they died, -1 while alive (awards: survivor)
 }
+
+/** One end-of-match award shown on the Results screen. */
+interface Award {
+  icon: string;
+  label: string;
+  name: string;
+  detail: string;
+}
+
+const freshCombat = (): CombatState => ({
+  vx: 0,
+  vz: 0,
+  stunUntil: 0,
+  lastAttackAt: 0,
+  lastSlamAt: 0,
+  lastPrankAt: 0,
+  damageDealt: 0,
+  wallSlamsTaken: 0,
+  diedAtMs: -1,
+});
 
 /**
  * The one room. Phase 01 lobby + Phase 02 combat + Phase 03 arena/zone/weapons.
@@ -72,6 +95,8 @@ export class GameRoom extends Room<GameState> {
   private goldenFired = false;
   private healFired = false;
   private eventBannerUntil = 0;
+  /** name of whoever drew first blood this match (awards); "" until the first kill. */
+  private firstBloodName = "";
 
   onCreate(options?: JoinOptions) {
     const state = new GameState();
@@ -81,10 +106,12 @@ export class GameRoom extends Room<GameState> {
     this.setSimulationInterval((dt) => this.update(dt), 1000 / TICK_RATE);
 
     // Movement intent — client sends where it wants to go; server decides.
-    this.onMessage(ClientMsg.Input, (client, msg: InputMessage) => {
+    // Zod-validated at the edge (Phase 04): a bad shape is dropped, not coerced.
+    this.onMessage(ClientMsg.Input, (client, msg) => {
       if (!this.state.players.has(client.sessionId)) return;
-      let dx = Number(msg?.dx) || 0;
-      let dz = Number(msg?.dz) || 0;
+      const parsed = inputSchema.safeParse(msg);
+      if (!parsed.success) return;
+      let { dx, dz } = parsed.data;
       const mag = Math.hypot(dx, dz);
       if (mag > 1) {
         dx /= mag;
@@ -97,19 +124,24 @@ export class GameRoom extends Room<GameState> {
     this.onMessage(ClientMsg.Attack, (client) => this.handleAttack(client.sessionId));
 
     // Lobby: ready toggle.
-    this.onMessage(ClientMsg.Ready, (client, msg: ReadyMessage) => {
+    this.onMessage(ClientMsg.Ready, (client, msg) => {
+      const parsed = readySchema.safeParse(msg);
+      if (!parsed.success) return;
       const p = this.state.players.get(client.sessionId);
-      if (p) p.ready = !!msg?.ready;
+      if (p) p.ready = parsed.data.ready;
     });
 
-    // Lobby: cosmetic pick (no stats). Clamp so a bad client can't set junk.
-    this.onMessage(ClientMsg.SetCosmetic, (client, msg: CosmeticMessage) => {
+    // Lobby: cosmetic pick (no stats). Validate + clamp so a bad client can't set junk.
+    this.onMessage(ClientMsg.SetCosmetic, (client, msg) => {
+      const parsed = cosmeticSchema.safeParse(msg);
+      if (!parsed.success) return;
       const p = this.state.players.get(client.sessionId);
       if (!p) return;
-      if (typeof msg?.colorIndex === "number") p.colorIndex = clamp(msg.colorIndex, 0, PLAYER_COLORS.length - 1);
-      if (typeof msg?.hatIndex === "number") p.hatIndex = clamp(msg.hatIndex, 0, HATS.length - 1);
-      if (typeof msg?.faceIndex === "number") p.faceIndex = clamp(msg.faceIndex, 0, FACES.length - 1);
-      if (typeof msg?.backIndex === "number") p.backIndex = clamp(msg.backIndex, 0, BACKS.length - 1);
+      const c = parsed.data;
+      if (c.colorIndex !== undefined) p.colorIndex = clamp(c.colorIndex, 0, PLAYER_COLORS.length - 1);
+      if (c.hatIndex !== undefined) p.hatIndex = clamp(c.hatIndex, 0, HATS.length - 1);
+      if (c.faceIndex !== undefined) p.faceIndex = clamp(c.faceIndex, 0, FACES.length - 1);
+      if (c.backIndex !== undefined) p.backIndex = clamp(c.backIndex, 0, BACKS.length - 1);
     });
 
     // Host-only: begin the match.
@@ -128,10 +160,17 @@ export class GameRoom extends Room<GameState> {
     });
 
     // Host-only: trigger a random event.
-    this.onMessage(ClientMsg.Event, (client, msg: EventMessage) => {
+    this.onMessage(ClientMsg.Event, (client, msg) => {
       if (client.sessionId !== this.state.hostSessionId) return;
       if (this.state.phase !== "playing") return;
-      if (msg?.kind === "golden" || msg?.kind === "heal") this.fireEvent(msg.kind);
+      const parsed = eventSchema.safeParse(msg);
+      if (parsed.success) this.fireEvent(parsed.data.kind);
+    });
+
+    // Dead-player only: lob a prank at a random survivor.
+    this.onMessage(ClientMsg.Prank, (client, msg) => {
+      const parsed = prankSchema.safeParse(msg);
+      if (parsed.success) this.handlePrank(client.sessionId, parsed.data.kind);
     });
 
     console.log(`[room ${this.roomId}] created (code=${state.code || "—"})`);
@@ -150,9 +189,9 @@ export class GameRoom extends Room<GameState> {
     if (this.state.players.size >= MAX_PLAYERS) throw new Error("room-full");
 
     const player = new Player();
-    player.name = (options?.name ?? "player").toString().trim().slice(0, 16) || "player";
+    player.name = cleanName(options?.name);
     this.state.players.set(client.sessionId, player);
-    this.combat.set(client.sessionId, { vx: 0, vz: 0, stunUntil: 0, lastAttackAt: 0, lastSlamAt: 0, kills: 0 });
+    this.combat.set(client.sessionId, freshCombat());
     console.log(`[room ${this.roomId}] + ${player.name} (${client.sessionId}) — ${this.state.players.size}/${MAX_PLAYERS}`);
   }
 
@@ -216,7 +255,9 @@ export class GameRoom extends Room<GameState> {
       if (dist > hammer.reach || dist < 1e-4) return;
       if ((ddx * fx + ddz * fz) / dist < arcCos) return; // outside the swing cone
 
+      const before = target.hp;
       target.hp = Math.max(0, target.hp - hammer.dmg);
+      cs.damageDealt += before - target.hp;
       const tcs = this.combat.get(tid);
       if (tcs) {
         tcs.vx += (ddx / dist) * hammer.knockback;
@@ -240,13 +281,56 @@ export class GameRoom extends Room<GameState> {
     if (cs) {
       cs.vx = 0;
       cs.vz = 0;
+      cs.diedAtMs = this.state.elapsedMs;
     }
     if (by) {
-      const k = this.combat.get(by);
-      if (k) k.kills += 1;
+      const killer = this.state.players.get(by);
+      if (killer) {
+        killer.kills += 1;
+        if (!this.firstBloodName) this.firstBloodName = killer.name;
+      }
     }
     this.broadcast(ServerMsg.Died, { id, by } as DiedEvent);
     console.log(`[room ${this.roomId}] ☠ ${p.name} died (by ${by || "zone/wall"})`);
+  }
+
+  /** A dead player lobs a prank at a random survivor. Harasses; never eliminates. */
+  private handlePrank(id: string, kind: PrankKind) {
+    if (this.state.phase !== "playing") return;
+    const sender = this.state.players.get(id);
+    const cs = this.combat.get(id);
+    if (!sender || sender.alive || !cs) return; // only the DEAD may prank
+    const now = Date.now();
+    if (now - cs.lastPrankAt < PRANK.cooldownMs) return;
+
+    const alive: string[] = [];
+    this.state.players.forEach((p, pid) => {
+      if (p.alive) alive.push(pid);
+    });
+    if (alive.length === 0) return;
+    cs.lastPrankAt = now;
+
+    const tid = alive[Math.floor(Math.random() * alive.length)];
+    const target = this.state.players.get(tid)!;
+    const tcs = this.combat.get(tid);
+    const a = Math.random() * Math.PI * 2;
+
+    if (kind === "banana") {
+      if (tcs) {
+        tcs.vx += Math.cos(a) * PRANK.banana.knockback;
+        tcs.vz += Math.sin(a) * PRANK.banana.knockback;
+        tcs.stunUntil = now + PRANK.banana.stunMs;
+      }
+    } else {
+      target.hp = Math.max(1, target.hp - PRANK.bomb.dmg); // floored — pranks don't kill
+      if (tcs) {
+        tcs.vx += Math.cos(a) * PRANK.bomb.knockback;
+        tcs.vz += Math.sin(a) * PRANK.bomb.knockback;
+        tcs.stunUntil = now + PRANK.bomb.stunMs;
+      }
+      this.broadcast(ServerMsg.Hit, { id: tid, by: "", dmg: PRANK.bomb.dmg, hp: target.hp } as HitEvent);
+    }
+    this.broadcast(ServerMsg.Prank, { id: tid, kind } as PrankEvent);
   }
 
   private checkWin() {
@@ -264,10 +348,58 @@ export class GameRoom extends Room<GameState> {
 
     if (aliveCount <= 1) {
       this.state.winnerId = aliveCount === 1 ? last : "";
+      this.state.awardsJson = JSON.stringify(this.computeAwards());
       this.state.phase = "ended";
       const w = this.state.players.get(last);
       console.log(`[room ${this.roomId}] 🏆 match ended — winner: ${w?.name ?? "—"}`);
     }
+  }
+
+  /** Funny end-of-match awards from tracked stats. Skips any with no qualifier. */
+  private computeAwards(): Award[] {
+    const rows = [...this.state.players.entries()].map(([id, p]) => {
+      const cs = this.combat.get(id);
+      const survived = cs && cs.diedAtMs >= 0 ? cs.diedAtMs : this.state.elapsedMs;
+      return {
+        id,
+        name: p.name,
+        kills: p.kills,
+        dmg: cs?.damageDealt ?? 0,
+        slams: cs?.wallSlamsTaken ?? 0,
+        survived,
+      };
+    });
+    if (rows.length === 0) return [];
+
+    const awards: Award[] = [];
+    const best = <T,>(arr: T[], score: (t: T) => number) =>
+      arr.reduce((a, b) => (score(b) > score(a) ? b : a));
+
+    const topKills = best(rows, (r) => r.kills);
+    if (topKills.kills > 0) {
+      awards.push({ icon: "⚔️", label: "สังหารมากสุด", name: topKills.name, detail: `${topKills.kills} คิล` });
+    }
+
+    if (this.firstBloodName) {
+      awards.push({ icon: "🩸", label: "เลือดหยดแรก", name: this.firstBloodName, detail: "" });
+    }
+
+    const winner = this.state.winnerId ? this.state.players.get(this.state.winnerId) : undefined;
+    const survivor = winner ? { name: winner.name, survived: this.state.elapsedMs } : best(rows, (r) => r.survived);
+    awards.push({ icon: "🛡️", label: "อยู่รอดนานสุด", name: survivor.name, detail: `${Math.round(survivor.survived / 1000)} วิ` });
+
+    // pacifist: least damage dealt (tie → survived longest), only meaningful with ≥2 players
+    if (rows.length >= 2) {
+      const pacifist = rows.reduce((a, b) => (b.dmg < a.dmg || (b.dmg === a.dmg && b.survived > a.survived) ? b : a));
+      awards.push({ icon: "🕊️", label: "สายรักสงบ", name: pacifist.name, detail: `ดาเมจ ${Math.round(pacifist.dmg)}` });
+    }
+
+    const topSlams = best(rows, (r) => r.slams);
+    if (topSlams.slams > 0) {
+      awards.push({ icon: "🧱", label: "โดนอัดกำแพงมากสุด", name: topSlams.name, detail: `${topSlams.slams} ครั้ง` });
+    }
+
+    return awards;
   }
 
   // ── Events / pickups ────────────────────────────────────────────────────────
@@ -319,9 +451,11 @@ export class GameRoom extends Room<GameState> {
     this.state.arenaRadius = this.stage.radius;
     this.state.zoneRadius = this.stage.radius;
     this.state.eventBanner = "";
+    this.state.awardsJson = "";
     this.eventBannerUntil = 0;
     this.goldenFired = false;
     this.healFired = false;
+    this.firstBloodName = "";
 
     this.spawnWeaponPickups();
     this.spawnPlayers();
@@ -358,8 +492,9 @@ export class GameRoom extends Room<GameState> {
       p.alive = true;
       p.stunned = false;
       p.hammer = DEFAULT_HAMMER;
+      p.kills = 0;
       this.inputs.set(id, { dx: 0, dz: 0 });
-      this.combat.set(id, { vx: 0, vz: 0, stunUntil: 0, lastAttackAt: 0, lastSlamAt: 0, kills: 0 });
+      this.combat.set(id, freshCombat());
     });
     this.aliveAtStart = n;
     this.state.winnerId = "";
@@ -371,24 +506,20 @@ export class GameRoom extends Room<GameState> {
     this.state.winnerId = "";
     this.state.zoneRadius = this.state.arenaRadius;
     this.state.eventBanner = "";
+    this.state.awardsJson = "";
     this.aliveAtStart = 0;
+    this.firstBloodName = "";
     this.inputs.clear();
     this.state.pickups.clear();
     this.pickupRespawnAt.clear();
-    this.combat.forEach((cs) => {
-      cs.vx = 0;
-      cs.vz = 0;
-      cs.stunUntil = 0;
-      cs.lastAttackAt = 0;
-      cs.lastSlamAt = 0;
-      cs.kills = 0;
-    });
+    this.combat.forEach((cs, id) => this.combat.set(id, freshCombat()));
     this.state.players.forEach((p) => {
       p.hp = HP_MAX;
       p.alive = true;
       p.stunned = false;
       p.ready = false;
       p.hammer = DEFAULT_HAMMER;
+      p.kills = 0;
     });
     console.log(`[room ${this.roomId}] ↺ reset to lobby`);
   }
@@ -446,6 +577,7 @@ export class GameRoom extends Room<GameState> {
           cs.lastSlamAt = now;
           cs.vx = 0;
           cs.vz = 0;
+          cs.wallSlamsTaken += 1;
           cs.stunUntil = now + this.stage.wallSlam.stunMs;
           p.hp = Math.max(0, p.hp - this.stage.wallSlam.dmg);
           this.broadcast(ServerMsg.Hit, { id, by: "", dmg: this.stage.wallSlam.dmg, hp: p.hp } as HitEvent);

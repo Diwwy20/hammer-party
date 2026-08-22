@@ -7,12 +7,15 @@ import {
   type DiedEvent,
   type EventKind,
   type HitEvent,
+  type PrankEvent,
+  type PrankKind,
   type SwingEvent,
 } from "@hammer/shared";
 import { colyseus } from "./client";
 import { useGame, type PickupView, type PlayerView } from "../store";
 import { recordSnapshot, resetBuffer, type Pos } from "./movement";
-import { markHit, markSwing, resetCombatFx } from "./combat";
+import { markHit, markPrank, markSwing, resetCombatFx } from "./combat";
+import { sfx } from "../audio";
 
 /** The live room. Kept module-level (non-serialisable) — never put it in the store. */
 let room: Room | undefined;
@@ -70,6 +73,11 @@ function wireRoom(r: Room): void {
   r.onMessage(ServerMsg.Died, (_m: DiedEvent) => {
     /* death ragdoll is driven by the synced `alive` flag; nothing to flash here */
   });
+  r.onMessage(ServerMsg.Prank, (m: PrankEvent) => {
+    markPrank(m.id, m.kind);
+    markHit(m.id);
+    if (m.id === useGame.getState().sessionId) sfx.prank();
+  });
 
   r.onLeave((code) => onRoomLeave(code));
 }
@@ -94,6 +102,7 @@ function applyState(state: any): void {
       hammer: p.hammer,
       stunned: p.stunned,
       connected: p.connected,
+      kills: p.kills,
     };
     pos[key] = { x: p.x, z: p.z, dir: p.dir };
   });
@@ -113,6 +122,7 @@ function applyState(state: any): void {
     zoneRadius: state.zoneRadius,
     stageTheme: state.stageTheme ?? "",
     eventBanner: state.eventBanner ?? "",
+    awardsJson: state.awardsJson ?? "",
   });
 }
 
@@ -173,6 +183,11 @@ export function sendRestart(): void {
 /** Host-only: trigger a random event (Golden Hammer / Heal orbs). */
 export function sendEvent(kind: EventKind): void {
   room?.send(ClientMsg.Event, { kind });
+}
+
+/** Dead-player only: throw a prank (banana/bomb) at a random survivor. */
+export function sendPrank(kind: PrankKind): void {
+  room?.send(ClientMsg.Prank, { kind });
 }
 
 /** Send movement intent (a normalised vector). The server decides the outcome. */

@@ -86,6 +86,21 @@ export const EVENT_BANNER_MS = 4000;
 /** HP restored by walking over a heal orb (Heal event). */
 export const HEAL_ORB_HP = 200;
 
+// ── Dead-player pranks (Phase 04) ───────────────────────────────────────────
+
+/**
+ * Spectators (dead players) can lob a prank at a random survivor. Pranks HARASS
+ * but never eliminate — bomb damage is floored so outcomes stay player-driven.
+ */
+export const PRANK = {
+  /** min gap between a spectator's prank throws (ms) */
+  cooldownMs: 3000,
+  banana: { stunMs: 700, knockback: 5 },
+  bomb: { dmg: 30, stunMs: 350, knockback: 12 },
+} as const;
+
+export type PrankKind = "banana" | "bomb";
+
 /** Colyseus room name used by both sides for joinOrCreate/define. */
 export const ROOM_NAME = "game";
 

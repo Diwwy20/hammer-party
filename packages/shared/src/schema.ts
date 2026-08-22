@@ -42,6 +42,8 @@ export class Player extends Schema {
   declare stunned: boolean;
   /** false while a dropped player's seat is held open for a reconnect. */
   declare connected: boolean;
+  /** kills this match (Phase 04 awards + live scoreboard). */
+  declare kills: number;
 
   // lobby / cosmetics
   declare ready: boolean;
@@ -61,6 +63,7 @@ export class Player extends Schema {
     this.hammer = DEFAULT_HAMMER;
     this.stunned = false;
     this.connected = true;
+    this.kills = 0;
     this.ready = false;
     this.colorIndex = DEFAULT_COLOR_INDEX;
     this.hatIndex = DEFAULT_HAT_INDEX;
@@ -79,6 +82,7 @@ defineTypes(Player, {
   hammer: "string",
   stunned: "boolean",
   connected: "boolean",
+  kills: "number",
   ready: "boolean",
   colorIndex: "number",
   hatIndex: "number",
@@ -129,6 +133,9 @@ export class GameState extends Schema {
   /** transient event toast (e.g. "⚡ ค้อนทองคำปรากฏ!"); "" when nothing to show. */
   declare eventBanner: string;
 
+  /** end-of-match awards as JSON (computed once when phase→"ended"); "" otherwise. */
+  declare awardsJson: string;
+
   /** Human-readable room code shown on the Host screen / used to join. */
   declare code: string;
   /** sessionId of the invisible Host (director on the big screen); "" if none. */
@@ -147,6 +154,7 @@ export class GameState extends Schema {
     this.stageId = "";
     this.stageTheme = "";
     this.eventBanner = "";
+    this.awardsJson = "";
     this.code = "";
     this.hostSessionId = "";
     this.winnerId = "";
@@ -163,6 +171,7 @@ defineTypes(GameState, {
   stageId: "string",
   stageTheme: "string",
   eventBanner: "string",
+  awardsJson: "string",
   code: "string",
   hostSessionId: "string",
   winnerId: "string",

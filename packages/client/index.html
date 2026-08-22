@@ -8,14 +8,10 @@
     />
     <title>Hammer Party</title>
 
-    <!-- Cartoon-minimal type: Baloo Thai 2 (rounded chunky display) + Sarabun (body).
-         Both cover Thai + Latin; system fallbacks keep the UI usable offline. -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Baloo+Thai+2:wght@500;600;700;800&family=Sarabun:wght@400;600;700&display=swap"
-      rel="stylesheet"
-    />
+    <!-- Cartoon-minimal type: Mali (rounded display) + Sarabun (body), both Thai + Latin.
+         SELF-HOSTED (public/fonts.css → public/fonts/*.woff2) so the game runs fully
+         offline on the event LAN. (The old "Baloo Thai 2" doesn't exist on Google Fonts.) -->
+    <link rel="stylesheet" href="/fonts.css" />
 
     <style>
       html,

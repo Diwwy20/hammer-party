@@ -10,7 +10,7 @@ Bright, friendly, uncluttered. **NOT** the old dark/fantasy gold theme (removed)
 - **Background:** light sky gradient + soft white bubbles.
 - **Cards:** white, big rounded corners (22px), soft shadow, 2px light border.
 - **Buttons:** chunky "candy" style with a **bottom lip** (`box-shadow: 0 5px 0 <darker>`), press = `translateY(4px)`.
-- **Fonts:** display/headings/buttons = **Baloo Thai 2** (rounded, bold); body = **Sarabun**. Google Fonts in `index.html` (self-host in Phase 04 for offline).
+- **Fonts:** display/headings/buttons = **Mali** (rounded, bold; Thai+Latin); body = **Sarabun**. **Self-hosted** for offline in `client/public/fonts/` (+ `public/fonts.css`, linked from `index.html`). NB: the earlier `"Baloo Thai 2"` was never a real Google font (silent fallback) — Mali replaced it in Phase 04. `--font-display`/`--font-body` tokens live in `styles.css` `@theme`.
 - **Swatches:** glossy colored balls. **Tabs:** rounded pills.
 
 ## Styling stack — Tailwind v4 + shadcn (Base UI)
