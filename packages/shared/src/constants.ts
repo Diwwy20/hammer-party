@@ -42,14 +42,32 @@ export type HammerKind = "fast" | "mid" | "heavy";
  */
 export const HAMMERS: Record<
   HammerKind,
-  { readonly label: string; readonly dmg: number; readonly cooldownMs: number; readonly knockback: number }
+  {
+    readonly label: string;
+    readonly dmg: number;
+    readonly cooldownMs: number;
+    /** Initial knockback speed (m/s) imparted to the victim, decays via KNOCKBACK_DECAY. */
+    readonly knockback: number;
+    /** How far (m, centre-to-centre) a swing can connect. */
+    readonly reach: number;
+    /** Half-angle of the swing cone (degrees) around the attacker's facing. */
+    readonly arcDeg: number;
+    /** How long the victim is frozen after a hit (ms). Heavy only; 0 = no stun. */
+    readonly stunMs: number;
+  }
 > = {
-  fast: { label: "ฆ้อนเร็ว", dmg: 2, cooldownMs: 220, knockback: 4 },
-  mid: { label: "ฆ้อนกลาง", dmg: 5, cooldownMs: 420, knockback: 7 },
-  heavy: { label: "ฆ้อนแรง", dmg: 20, cooldownMs: 900, knockback: 14 },
+  fast: { label: "ฆ้อนเร็ว", dmg: 2, cooldownMs: 220, knockback: 4, reach: 2.0, arcDeg: 55, stunMs: 0 },
+  mid: { label: "ฆ้อนกลาง", dmg: 5, cooldownMs: 420, knockback: 7, reach: 2.3, arcDeg: 65, stunMs: 0 },
+  heavy: { label: "ฆ้อนแรง", dmg: 20, cooldownMs: 900, knockback: 14, reach: 2.7, arcDeg: 80, stunMs: 550 },
 };
 
 export const DEFAULT_HAMMER: HammerKind = "mid";
+
+/** Knockback velocity decays by this factor per second (exponential). Higher = stops sooner. */
+export const KNOCKBACK_DECAY = 6;
+
+/** A player whose connection drops mid-match keeps their seat this long for a reconnect. */
+export const RECONNECT_SECONDS = 20;
 
 /** Colyseus room name used by both sides for joinOrCreate/define. */
 export const ROOM_NAME = "game";

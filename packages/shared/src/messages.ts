@@ -13,8 +13,42 @@ export const ClientMsg = {
   SetCosmetic: "cosmetic",
   /** Host-only: leave the lobby and begin the match. */
   Start: "start",
+  /** Host-only: end the current match and send everyone back to the lobby. */
+  Restart: "restart",
 } as const;
 export type ClientMsg = (typeof ClientMsg)[keyof typeof ClientMsg];
+
+/**
+ * Server → client one-shot events for transient combat FX. These are NOT state —
+ * they animate a swing / hit / death on every client (visual only). Anything the
+ * clients must AGREE on (hp, alive, position) stays in the synced schema instead.
+ */
+export const ServerMsg = {
+  Swing: "swing",
+  Hit: "hit",
+  Died: "died",
+} as const;
+export type ServerMsg = (typeof ServerMsg)[keyof typeof ServerMsg];
+
+/** A player swung their hammer (play the swing animation for `id`). */
+export interface SwingEvent {
+  id: string;
+  hammer: HammerKind;
+}
+
+/** `id` took `dmg` from `by`, leaving them at `hp` (flash + optional damage number). */
+export interface HitEvent {
+  id: string;
+  by: string;
+  dmg: number;
+  hp: number;
+}
+
+/** `id` was defeated by `by` (trigger the client-only ragdoll + kill feed). */
+export interface DiedEvent {
+  id: string;
+  by: string;
+}
 
 /** Options sent with create()/join(). */
 export interface JoinOptions {

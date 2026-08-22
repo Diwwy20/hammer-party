@@ -35,11 +35,15 @@ R3F canvas. Done.
 - ⚠️ **Still owed for a true tick-off:** a **real ~25-device/tab load test** measuring fps/latency (don't assume from 2 tabs). Do this before/at Phase 04 event hardening.
 - 📦 `feat: virtual joystick + authoritative 25-player movement (interp + prediction)`
 
-## → NEXT: Phase 02 (Combat)
-
-## Phase 02 — Combat ⬜ — kill + the game can end
-Medium hammer + attack input + cooldown · server hit detection (radius/angle) · damage/HP · knockback (impulse+decay) · stun · death → spectator + client-only ragdoll · win `alive==1` → Results · reconnection · Host free-cam + quick Restart.
+## Phase 02 — Combat ✅ — kill + the game can end
+Medium hammer + attack input + cooldown · server hit detection (reach + swing-arc cone) · damage/HP · knockback (impulse+decay) · heavy-hammer stun · death → spectator + client-only ragdoll · win `alive==1` → Results · reconnection · Host spectator free-cam + Restart.
+- **First-person** player cam (host + dead keep the orbit spectator cam); attack button holds-to-swing.
+- Combat resolves server-side in `server/rooms/GameRoom.ts` (`handleAttack`); swing/hit are **broadcasts**, not schema — client FX in `client/src/net/combat.ts`. New synced fields: `Player.stunned/connected`, `GameState.winnerId`.
+- Reconnection: server `allowReconnection` (RECONNECT_SECONDS) + client `colyseus.reconnect(token)` in `net/session.ts`.
+- Verified: headless host+2-player smoke (walk together → damage → death → `phase="ended"` + winner). ⚠️ reconnection wired but not yet tested on real flaky wifi.
 ✅ Done when a full match plays to the end; dropping and reconnecting works.
+
+## → NEXT: Phase 03 (Arena · Zone · Weapons)
 
 ## Phase 03 — Arena · Zone · Weapons ⬜
 Real arena + hazard walls · shrinking zone (out-of-zone damage, accelerates to force finish ~20 min) · Fast/Heavy hammer pickups · 2–3 random events + Host trigger · model a **stage as config** `{radius, hazards, spawns, theme}` for future maps.

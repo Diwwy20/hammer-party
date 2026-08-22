@@ -38,6 +38,10 @@ export class Player extends Schema {
   declare hp: number;
   declare alive: boolean;
   declare hammer: string;
+  /** Frozen by a heavy hit — the client suppresses self-prediction while true. */
+  declare stunned: boolean;
+  /** false while a dropped player's seat is held open for a reconnect. */
+  declare connected: boolean;
 
   // lobby / cosmetics
   declare ready: boolean;
@@ -55,6 +59,8 @@ export class Player extends Schema {
     this.hp = HP_MAX;
     this.alive = true;
     this.hammer = DEFAULT_HAMMER;
+    this.stunned = false;
+    this.connected = true;
     this.ready = false;
     this.colorIndex = DEFAULT_COLOR_INDEX;
     this.hatIndex = DEFAULT_HAT_INDEX;
@@ -71,6 +77,8 @@ defineTypes(Player, {
   hp: "number",
   alive: "boolean",
   hammer: "string",
+  stunned: "boolean",
+  connected: "boolean",
   ready: "boolean",
   colorIndex: "number",
   hatIndex: "number",
@@ -89,6 +97,8 @@ export class GameState extends Schema {
   declare code: string;
   /** sessionId of the invisible Host (director on the big screen); "" if none. */
   declare hostSessionId: string;
+  /** sessionId of the winner once phase==="ended" (""=no survivor / not decided). */
+  declare winnerId: string;
 
   constructor() {
     super();
@@ -98,6 +108,7 @@ export class GameState extends Schema {
     this.elapsedMs = -1;
     this.code = "";
     this.hostSessionId = "";
+    this.winnerId = "";
   }
 }
 
@@ -108,4 +119,5 @@ defineTypes(GameState, {
   elapsedMs: "number",
   code: "string",
   hostSessionId: "string",
+  winnerId: "string",
 });

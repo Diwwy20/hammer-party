@@ -8,7 +8,7 @@ import {
 } from "@hammer/shared";
 
 /** Client connection lifecycle (distinct from the server-side game phase). */
-export type Conn = "idle" | "connecting" | "open" | "error";
+export type Conn = "idle" | "connecting" | "open" | "reconnecting" | "error";
 
 /** A flattened, render-friendly view of a Player mirrored out of room.state. */
 export interface PlayerView {
@@ -20,6 +20,12 @@ export interface PlayerView {
   hatIndex: number;
   faceIndex: number;
   backIndex: number;
+  // combat (Phase 02)
+  hp: number;
+  alive: boolean;
+  hammer: string;
+  stunned: boolean;
+  connected: boolean;
 }
 
 /** Just the cosmetic slots — what CharacterPreview needs to draw an avatar. */
@@ -44,6 +50,7 @@ interface GameStore {
   code: string;
   phase: GamePhase;
   hostSessionId: string;
+  winnerId: string;
   players: Record<string, PlayerView>;
 
   set: (patch: Partial<GameStore>) => void;
@@ -60,6 +67,7 @@ const initial = {
   code: "",
   phase: "lobby" as GamePhase,
   hostSessionId: "",
+  winnerId: "",
   players: {} as Record<string, PlayerView>,
 };
 

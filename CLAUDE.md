@@ -22,9 +22,17 @@ Distilled project knowledge lives in `.claude/skills/`. Load only what a task ne
   - join-by-code (QR → name only), Host role + Start, entry Splash, Lobby with a 3D character,
     ready-toggle, roster, **cosmetics (color/hat/face/back)**, cartoon-minimal theme.
   - **Movement**: nipplejs joystick → authoritative 20Hz server movement → client interpolation
-    (others) + prediction (self), follow-cam, name tags. Netcode in `client/src/net/movement.ts`.
-  - ⚠️ Still owed: a **real ~25-device load test** (fps/latency) before the event (Phase 04).
-- **Phase 02 (Combat) is next.** Phase 03–05 not started.
+    (others) + prediction (self), name tags. Netcode in `client/src/net/movement.ts`.
+- **Phase 02** (Combat) — **done**.
+  - **First-person** player camera (host + dead players keep the free spectator orbit-cam).
+  - Attack button + cooldown → **server** hit detection (reach + swing-arc cone), damage/HP,
+    knockback (impulse + exp decay), heavy-hammer **stun**, death → spectator + **client-only ragdoll**,
+    win (`alive==1`) → **Results** overlay, Host **Restart** (→ lobby), **reconnection**
+    (`allowReconnection` + client `reconnect`). Combat FX (swing/hit) broadcast, not synced —
+    see `client/src/net/combat.ts`. Verified with a headless host+2-player smoke run.
+  - ⚠️ Still owed: a **real ~25-device load test** (fps/latency) before the event (Phase 04);
+    reconnection is wired but not yet tested on real flaky wifi.
+- **Phase 03 (Arena · Zone · Weapons) is next.** Phase 04–05 not started.
 - Styling is **Tailwind v4 + shadcn (Base UI)** — see `ui-conventions`.
 
 ## 🔑 Non-negotiable rules
