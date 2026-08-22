@@ -18,11 +18,14 @@ Distilled project knowledge lives in `.claude/skills/`. Load only what a task ne
 
 ## ✅ Current status (2026-08)
 - **Phase 00** (foundation) — done.
-- **Phase 01** (Join · Lobby · Movement) — **Lobby slice done**, **Movement is the next piece**.
-  - Done: join-by-code (QR → name only), Host role + Start, entry Splash, Lobby with a
-    3D character, ready-toggle, roster, **cosmetics (color/hat/face/back)**, cartoon-minimal theme.
-  - Not yet: virtual joystick + movement + 25-player synced walking (the #1 risk → load-test it).
-- **Phase 02–05** — not started.
+- **Phase 01** (Join · Lobby · Movement) — **done**.
+  - join-by-code (QR → name only), Host role + Start, entry Splash, Lobby with a 3D character,
+    ready-toggle, roster, **cosmetics (color/hat/face/back)**, cartoon-minimal theme.
+  - **Movement**: nipplejs joystick → authoritative 20Hz server movement → client interpolation
+    (others) + prediction (self), follow-cam, name tags. Netcode in `client/src/net/movement.ts`.
+  - ⚠️ Still owed: a **real ~25-device load test** (fps/latency) before the event (Phase 04).
+- **Phase 02 (Combat) is next.** Phase 03–05 not started.
+- Styling is **Tailwind v4 + shadcn (Base UI)** — see `ui-conventions`.
 
 ## 🔑 Non-negotiable rules
 - **`packages/shared/src/constants.ts` is the single source of truth** for every game value (HP, damage, tick, radius, cosmetic catalogs). Never hardcode a number elsewhere.

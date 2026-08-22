@@ -2,9 +2,11 @@ import type { Room } from "colyseus.js";
 import { ClientMsg, ROOM_NAME, type CosmeticMessage } from "@hammer/shared";
 import { colyseus } from "./client";
 import { useGame, type PlayerView } from "../store";
+import { recordSnapshot, resetBuffer, type Pos } from "./movement";
 
 /** The live room. Kept module-level (non-serialisable) — never put it in the store. */
 let room: Room | undefined;
+let inputSeq = 0;
 
 export interface ConnectOpts {
   name: string;
@@ -26,6 +28,8 @@ export async function connect(opts: ConnectOpts): Promise<void> {
       ? await colyseus.create(ROOM_NAME, joinOpts)
       : await colyseus.join(ROOM_NAME, joinOpts);
 
+    inputSeq = 0;
+    resetBuffer();
     useGame.getState().set({
       conn: "open",
       roomId: room.roomId,
@@ -34,8 +38,11 @@ export async function connect(opts: ConnectOpts): Promise<void> {
 
     // Rebuild the render-friendly view on every state patch. Cheap for 25
     // players @ 20Hz; granular callbacks can come later if profiling asks.
+    // Positions/dir go to the interpolation buffer (read per-frame in the game),
+    // NOT the zustand store — that would re-render React 20×/s.
     const apply = (state: any) => {
       const players: Record<string, PlayerView> = {};
+      const pos: Record<string, Pos> = {};
       state.players?.forEach((p: any, key: string) => {
         players[key] = {
           name: p.name,
@@ -47,7 +54,9 @@ export async function connect(opts: ConnectOpts): Promise<void> {
           faceIndex: p.faceIndex,
           backIndex: p.backIndex,
         };
+        pos[key] = { x: p.x, z: p.z, dir: p.dir };
       });
+      recordSnapshot(pos);
       useGame.getState().set({
         players,
         phase: state.phase,
@@ -74,6 +83,11 @@ export function sendCosmetic(msg: CosmeticMessage): void {
 
 export function sendStart(): void {
   room?.send(ClientMsg.Start);
+}
+
+/** Send movement intent (a normalised vector). The server decides the outcome. */
+export function sendInput(dx: number, dz: number): void {
+  room?.send(ClientMsg.Input, { seq: ++inputSeq, dx, dz });
 }
 
 export function leaveRoom(): void {

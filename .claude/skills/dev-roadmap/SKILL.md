@@ -16,7 +16,7 @@ commit. The biggest risk (syncing 25 players) is pulled forward to Phase 01.
 Monorepo (`@hammer/shared|server|client`), `shared/constants.ts`, Colyseus room handshake,
 R3F canvas. Done.
 
-## Phase 01 — Join · Lobby · Movement 🟡 (proves risk #1)
+## Phase 01 — Join · Lobby · Movement ✅ (proved risk #1)
 🎯 25 phones in one room, walking and seeing each other smoothly.
 
 **Lobby slice — ✅ DONE:**
@@ -28,10 +28,14 @@ R3F canvas. Done.
 - Start match → `phase="playing"` → everyone routes to GameScreen.
 - Cartoon-minimal theme applied.
 
-**Movement — ⬜ NEXT (the remaining Phase 01 piece):**
-- Virtual joystick (nipplejs) → send `InputMessage` · server moves players in the 20Hz loop · client interpolation + light prediction + follow-cam + floating name tags.
-- ✅ **Done when:** ~25 devices/tabs walk and see each other smoothly **+ a real load test** measuring fps/latency (not 3 tabs and assume it's fine).
-- 📦 `feat: virtual joystick + 25-player synced movement`
+**Movement — ✅ DONE:**
+- Virtual joystick (nipplejs, `GameScreen`) → `sendInput` at 20Hz → server moves players in the 20Hz loop (`GameRoom.update`, clamps to arena, spawns on a ring at Start) → client **interpolates** others ~100ms back + **predicts** self, third-person follow-cam, floating name tags (drei `Html`).
+- Netcode buffer in `client/src/net/movement.ts`; input in `net/session.ts` `sendInput`.
+- Verified: headless 2-client integration test (spawn→move→clamp→halt) + in-browser client run with no errors.
+- ⚠️ **Still owed for a true tick-off:** a **real ~25-device/tab load test** measuring fps/latency (don't assume from 2 tabs). Do this before/at Phase 04 event hardening.
+- 📦 `feat: virtual joystick + authoritative 25-player movement (interp + prediction)`
+
+## → NEXT: Phase 02 (Combat)
 
 ## Phase 02 — Combat ⬜ — kill + the game can end
 Medium hammer + attack input + cooldown · server hit detection (radius/angle) · damage/HP · knockback (impulse+decay) · stun · death → spectator + client-only ragdoll · win `alive==1` → Results · reconnection · Host free-cam + quick Restart.

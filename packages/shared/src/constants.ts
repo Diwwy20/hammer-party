@@ -19,8 +19,20 @@ export const MATCH_MAX_MINUTES = 20;
 /** Colosseum arena radius (meters) at match start, before the zone shrinks. */
 export const ARENA_RADIUS = 24;
 
-/** Placeholder walk speed (m/s) — real movement lands in Phase 01. */
+/** Walk speed (m/s), applied by the authoritative server. */
 export const MOVE_SPEED = 5;
+
+/** Capsule radius (m) — used for arena-edge clamping and spawn spacing. */
+export const PLAYER_RADIUS = 0.5;
+
+/** Players spawn on a ring at this radius when the match starts. */
+export const SPAWN_RADIUS = ARENA_RADIUS * 0.65;
+
+/** Client renders OTHER players this far in the past for smooth interpolation. */
+export const INTERP_DELAY_MS = 100;
+
+/** How often the client samples the joystick and sends input up. */
+export const INPUT_SEND_HZ = 20;
 
 export type HammerKind = "fast" | "mid" | "heavy";
 

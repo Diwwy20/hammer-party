@@ -1,13 +1,17 @@
 import { Room, type Client } from "colyseus";
 import { GameState, Player } from "@hammer/shared/schema";
 import {
+  ARENA_RADIUS,
   BACKS,
   ClientMsg,
   FACES,
   HATS,
   MAX_PLAYERS,
   MIN_PLAYERS_TO_START,
+  MOVE_SPEED,
   PLAYER_COLORS,
+  PLAYER_RADIUS,
+  SPAWN_RADIUS,
   TICK_RATE,
   type CosmeticMessage,
   type InputMessage,
@@ -29,17 +33,29 @@ export class GameRoom extends Room<GameState> {
   // host occupies one connection slot on top of the player cap
   maxClients = MAX_PLAYERS + 1;
 
+  /** Latest movement intent per player (server-side only; never in the schema). */
+  private inputs = new Map<string, { dx: number; dz: number }>();
+
   onCreate(options?: JoinOptions) {
     const state = new GameState();
     state.code = (options?.code ?? "").toUpperCase();
     this.setState(state);
 
-    // Fixed-rate authoritative loop (empty until movement lands).
+    // Fixed-rate authoritative loop.
     this.setSimulationInterval((dt) => this.update(dt), 1000 / TICK_RATE);
 
-    // Movement intent — acknowledged now, applied when movement lands.
-    this.onMessage(ClientMsg.Input, (_client, _msg: InputMessage) => {
-      /* later */
+    // Movement intent — the client sends only where it wants to go; the server
+    // decides the outcome. Store the latest normalised vector; apply it in update().
+    this.onMessage(ClientMsg.Input, (client, msg: InputMessage) => {
+      if (!this.state.players.has(client.sessionId)) return;
+      let dx = Number(msg?.dx) || 0;
+      let dz = Number(msg?.dz) || 0;
+      const mag = Math.hypot(dx, dz);
+      if (mag > 1) {
+        dx /= mag;
+        dz /= mag;
+      }
+      this.inputs.set(client.sessionId, { dx, dz });
     });
 
     // Lobby: ready toggle.
@@ -71,6 +87,7 @@ export class GameRoom extends Room<GameState> {
       if (client.sessionId !== this.state.hostSessionId) return;
       if (this.state.phase !== "lobby") return;
       if (this.state.players.size < MIN_PLAYERS_TO_START) return;
+      this.spawnPlayers();
       this.state.phase = "playing";
       this.state.elapsedMs = 0;
       console.log(`[room ${this.roomId}] ▶ match started (${this.state.players.size} players)`);
@@ -104,6 +121,7 @@ export class GameRoom extends Room<GameState> {
   }
 
   onLeave(client: Client) {
+    this.inputs.delete(client.sessionId);
     if (client.sessionId === this.state.hostSessionId) {
       this.state.hostSessionId = "";
       console.log(`[room ${this.roomId}] - HOST left`);
@@ -113,8 +131,46 @@ export class GameRoom extends Room<GameState> {
     console.log(`[room ${this.roomId}] - ${client.sessionId} — ${this.state.players.size} remaining`);
   }
 
-  private update(_deltaMs: number) {
-    // No simulation yet. Kept so the loop wiring is real from day one.
+  /** Scatter players on a ring facing the centre when the match begins. */
+  private spawnPlayers() {
+    const ids = [...this.state.players.keys()];
+    const n = ids.length;
+    ids.forEach((id, i) => {
+      const p = this.state.players.get(id)!;
+      const a = (i / Math.max(1, n)) * Math.PI * 2;
+      p.x = Math.cos(a) * SPAWN_RADIUS;
+      p.z = Math.sin(a) * SPAWN_RADIUS;
+      p.dir = Math.atan2(-p.x, -p.z); // look toward centre
+      this.inputs.set(id, { dx: 0, dz: 0 });
+    });
+  }
+
+  /** Authoritative movement step. */
+  private update(deltaMs: number) {
+    if (this.state.phase !== "playing") return;
+    const dt = deltaMs / 1000;
+    const maxR = ARENA_RADIUS - PLAYER_RADIUS;
+
+    this.state.players.forEach((p, id) => {
+      const input = this.inputs.get(id);
+      if (!input || (input.dx === 0 && input.dz === 0)) return;
+
+      let x = p.x + input.dx * MOVE_SPEED * dt;
+      let z = p.z + input.dz * MOVE_SPEED * dt;
+
+      // keep inside the arena
+      const r = Math.hypot(x, z);
+      if (r > maxR) {
+        x = (x / r) * maxR;
+        z = (z / r) * maxR;
+      }
+
+      p.x = x;
+      p.z = z;
+      p.dir = Math.atan2(input.dx, input.dz); // face the direction of travel
+    });
+
+    this.state.elapsedMs += deltaMs;
   }
 }
 
