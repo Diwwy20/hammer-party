@@ -5,11 +5,12 @@ import {
   ServerMsg,
   type CosmeticMessage,
   type DiedEvent,
+  type EventKind,
   type HitEvent,
   type SwingEvent,
 } from "@hammer/shared";
 import { colyseus } from "./client";
-import { useGame, type PlayerView } from "../store";
+import { useGame, type PickupView, type PlayerView } from "../store";
 import { recordSnapshot, resetBuffer, type Pos } from "./movement";
 import { markHit, markSwing, resetCombatFx } from "./combat";
 
@@ -96,13 +97,22 @@ function applyState(state: any): void {
     };
     pos[key] = { x: p.x, z: p.z, dir: p.dir };
   });
+  const pickups: Record<string, PickupView> = {};
+  state.pickups?.forEach((pk: any, key: string) => {
+    pickups[key] = { kind: pk.kind, x: pk.x, z: pk.z, active: pk.active };
+  });
   recordSnapshot(pos);
   useGame.getState().set({
     players,
+    pickups,
     phase: state.phase,
     code: state.code || joinedCode,
     hostSessionId: state.hostSessionId,
     winnerId: state.winnerId ?? "",
+    arenaRadius: state.arenaRadius,
+    zoneRadius: state.zoneRadius,
+    stageTheme: state.stageTheme ?? "",
+    eventBanner: state.eventBanner ?? "",
   });
 }
 
@@ -158,6 +168,11 @@ export function sendStart(): void {
 
 export function sendRestart(): void {
   room?.send(ClientMsg.Restart);
+}
+
+/** Host-only: trigger a random event (Golden Hammer / Heal orbs). */
+export function sendEvent(kind: EventKind): void {
+  room?.send(ClientMsg.Event, { kind });
 }
 
 /** Send movement intent (a normalised vector). The server decides the outcome. */

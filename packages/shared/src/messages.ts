@@ -15,8 +15,18 @@ export const ClientMsg = {
   Start: "start",
   /** Host-only: end the current match and send everyone back to the lobby. */
   Restart: "restart",
+  /** Host-only: trigger a random event (Golden Hammer / Heal orbs). */
+  Event: "event",
 } as const;
 export type ClientMsg = (typeof ClientMsg)[keyof typeof ClientMsg];
+
+/** Random events the Host can trigger (also fire automatically mid-match). */
+export type EventKind = "golden" | "heal";
+
+/** Host → server: spawn this event's pickups. */
+export interface EventMessage {
+  kind: EventKind;
+}
 
 /**
  * Server → client one-shot events for transient combat FX. These are NOT state —

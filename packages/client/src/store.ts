@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import {
+  ARENA_RADIUS,
   DEFAULT_BACK_INDEX,
   DEFAULT_COLOR_INDEX,
   DEFAULT_FACE_INDEX,
@@ -28,6 +29,14 @@ export interface PlayerView {
   connected: boolean;
 }
 
+/** A map collectible mirrored out of room.state (weapon or event item). */
+export interface PickupView {
+  kind: string;
+  x: number;
+  z: number;
+  active: boolean;
+}
+
 /** Just the cosmetic slots — what CharacterPreview needs to draw an avatar. */
 export interface Cosmetic {
   colorIndex: number;
@@ -52,6 +61,12 @@ interface GameStore {
   hostSessionId: string;
   winnerId: string;
   players: Record<string, PlayerView>;
+  // Phase 03: arena / zone / weapons
+  pickups: Record<string, PickupView>;
+  arenaRadius: number;
+  zoneRadius: number;
+  stageTheme: string;
+  eventBanner: string;
 
   set: (patch: Partial<GameStore>) => void;
   reset: () => void;
@@ -69,6 +84,11 @@ const initial = {
   hostSessionId: "",
   winnerId: "",
   players: {} as Record<string, PlayerView>,
+  pickups: {} as Record<string, PickupView>,
+  arenaRadius: ARENA_RADIUS,
+  zoneRadius: ARENA_RADIUS,
+  stageTheme: "",
+  eventBanner: "",
 };
 
 export const useGame = create<GameStore>((set) => ({

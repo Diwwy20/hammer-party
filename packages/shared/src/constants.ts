@@ -34,11 +34,13 @@ export const INTERP_DELAY_MS = 100;
 /** How often the client samples the joystick and sends input up. */
 export const INPUT_SEND_HZ = 20;
 
-export type HammerKind = "fast" | "mid" | "heavy";
+/** The 3 normal hammers + `golden` (a random-event power weapon, ~one-shot). */
+export type HammerKind = "fast" | "mid" | "heavy" | "golden";
 
 /**
- * The 3 hammers. Everyone starts on `mid`; `fast`/`heavy` spawn as map pickups.
- * What matters is the RATIO between them, not the exact numbers (GDD).
+ * Hammers. Everyone starts on `mid`; `fast`/`heavy` spawn as map pickups; `golden`
+ * only appears via the Golden Hammer event. What matters is the RATIO, not the
+ * exact numbers (GDD).
  */
 export const HAMMERS: Record<
   HammerKind,
@@ -52,13 +54,14 @@ export const HAMMERS: Record<
     readonly reach: number;
     /** Half-angle of the swing cone (degrees) around the attacker's facing. */
     readonly arcDeg: number;
-    /** How long the victim is frozen after a hit (ms). Heavy only; 0 = no stun. */
+    /** How long the victim is frozen after a hit (ms). 0 = no stun. */
     readonly stunMs: number;
   }
 > = {
   fast: { label: "ฆ้อนเร็ว", dmg: 2, cooldownMs: 220, knockback: 4, reach: 2.0, arcDeg: 55, stunMs: 0 },
   mid: { label: "ฆ้อนกลาง", dmg: 5, cooldownMs: 420, knockback: 7, reach: 2.3, arcDeg: 65, stunMs: 0 },
   heavy: { label: "ฆ้อนแรง", dmg: 20, cooldownMs: 900, knockback: 14, reach: 2.7, arcDeg: 80, stunMs: 550 },
+  golden: { label: "ฆ้อนทองคำ", dmg: 250, cooldownMs: 650, knockback: 22, reach: 3.2, arcDeg: 100, stunMs: 350 },
 };
 
 export const DEFAULT_HAMMER: HammerKind = "mid";
@@ -68,6 +71,20 @@ export const KNOCKBACK_DECAY = 6;
 
 /** A player whose connection drops mid-match keeps their seat this long for a reconnect. */
 export const RECONNECT_SECONDS = 20;
+
+// ── Pickups / hazards (Phase 03) ────────────────────────────────────────────
+
+/** Walk within this distance (m) of a pickup to collect it. */
+export const PICKUP_RADIUS = 1.2;
+
+/** A collected weapon pickup respawns after this long (ms). Event orbs don't respawn. */
+export const WEAPON_RESPAWN_MS = 12000;
+
+/** How long an event banner ("⚡ ค้อนทองคำ!") stays on screen (ms). */
+export const EVENT_BANNER_MS = 4000;
+
+/** HP restored by walking over a heal orb (Heal event). */
+export const HEAL_ORB_HP = 200;
 
 /** Colyseus room name used by both sides for joinOrCreate/define. */
 export const ROOM_NAME = "game";

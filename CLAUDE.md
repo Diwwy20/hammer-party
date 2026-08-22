@@ -29,10 +29,18 @@ Distilled project knowledge lives in `.claude/skills/`. Load only what a task ne
     knockback (impulse + exp decay), heavy-hammer **stun**, death → spectator + **client-only ragdoll**,
     win (`alive==1`) → **Results** overlay, Host **Restart** (→ lobby), **reconnection**
     (`allowReconnection` + client `reconnect`). Combat FX (swing/hit) broadcast, not synced —
-    see `client/src/net/combat.ts`. Verified with a headless host+2-player smoke run.
+    see `client/src/net/combat.ts`.
+- **Phase 03** (Arena · Zone · Weapons) — **done**.
+  - **Stage-as-config** in `packages/shared/src/stages.ts` (`{radius, spawnRadius, zone, weaponSpawns, wallSlam, theme}`);
+    server reads the active stage — future maps swap data, not combat code.
+  - **Shrinking safe zone** (`zoneRadiusAt`, eases-in / accelerates late to force a finish); out-of-zone HP bleed;
+    client renders lava floor revealed under the shrinking safe disc + out-of-zone warning.
+  - **Weapon pickups** (Fast/Heavy, respawn on a timer) swap your hammer; **wall-slam** (knockback into the wall = extra dmg + stun).
+  - **Events**: Golden Hammer (center, ~one-shot) + Heal orbs, auto-fired mid-match and **Host-triggerable**; transient `eventBanner`.
+    New synced state: `Pickup` map, `GameState.zoneRadius/stageId/stageTheme/eventBanner`. Verified with headless smokes + in-browser run.
   - ⚠️ Still owed: a **real ~25-device load test** (fps/latency) before the event (Phase 04);
     reconnection is wired but not yet tested on real flaky wifi.
-- **Phase 03 (Arena · Zone · Weapons) is next.** Phase 04–05 not started.
+- **Phase 04 (Juice · Cosmetics · Polish) is next.** Phase 05 not started.
 - Styling is **Tailwind v4 + shadcn (Base UI)** — see `ui-conventions`.
 
 ## 🔑 Non-negotiable rules

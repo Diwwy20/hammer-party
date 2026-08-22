@@ -86,12 +86,48 @@ defineTypes(Player, {
   backIndex: "number",
 });
 
+/**
+ * A collectible on the map: a weapon (fast/heavy), or an event item (golden/heal).
+ * `active` toggles off when taken (weapons respawn on a timer; event items don't).
+ */
+export class Pickup extends Schema {
+  declare kind: string;
+  declare x: number;
+  declare z: number;
+  declare active: boolean;
+
+  constructor() {
+    super();
+    this.kind = "fast";
+    this.x = 0;
+    this.z = 0;
+    this.active = true;
+  }
+}
+
+defineTypes(Pickup, {
+  kind: "string",
+  x: "number",
+  z: "number",
+  active: "boolean",
+});
+
 export class GameState extends Schema {
   declare players: MapSchema<Player>;
+  declare pickups: MapSchema<Pickup>;
   declare phase: GamePhase;
   declare arenaRadius: number;
+  /** current safe-zone radius (m); shrinks over the match. Equals arenaRadius in lobby. */
+  declare zoneRadius: number;
   /** ms since match start; -1 while in lobby */
   declare elapsedMs: number;
+
+  /** active stage id + theme (client renders visuals from the theme). */
+  declare stageId: string;
+  declare stageTheme: string;
+
+  /** transient event toast (e.g. "⚡ ค้อนทองคำปรากฏ!"); "" when nothing to show. */
+  declare eventBanner: string;
 
   /** Human-readable room code shown on the Host screen / used to join. */
   declare code: string;
@@ -103,9 +139,14 @@ export class GameState extends Schema {
   constructor() {
     super();
     this.players = new MapSchema<Player>();
+    this.pickups = new MapSchema<Pickup>();
     this.phase = "lobby";
     this.arenaRadius = ARENA_RADIUS;
+    this.zoneRadius = ARENA_RADIUS;
     this.elapsedMs = -1;
+    this.stageId = "";
+    this.stageTheme = "";
+    this.eventBanner = "";
     this.code = "";
     this.hostSessionId = "";
     this.winnerId = "";
@@ -114,9 +155,14 @@ export class GameState extends Schema {
 
 defineTypes(GameState, {
   players: { map: Player },
+  pickups: { map: Pickup },
   phase: "string",
   arenaRadius: "number",
+  zoneRadius: "number",
   elapsedMs: "number",
+  stageId: "string",
+  stageTheme: "string",
+  eventBanner: "string",
   code: "string",
   hostSessionId: "string",
   winnerId: "string",

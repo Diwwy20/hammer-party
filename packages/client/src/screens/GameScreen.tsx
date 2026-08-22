@@ -1,10 +1,9 @@
-import { useEffect, useRef, type MutableRefObject } from "react";
+import { useEffect, useRef, useState, type MutableRefObject } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Grid, Html, OrbitControls } from "@react-three/drei";
-import type { Group } from "three";
+import type { Group, Mesh } from "three";
 import nipplejs from "nipplejs";
 import {
-  ARENA_RADIUS,
   HAMMERS,
   HP_MAX,
   INPUT_SEND_HZ,
@@ -13,10 +12,10 @@ import {
   PLAYER_RADIUS,
   type HammerKind,
 } from "@hammer/shared";
-import { useGame } from "../store";
-import { leaveRoom, sendAttack, sendInput, sendRestart } from "../net/session";
+import { useGame, type PickupView } from "../store";
+import { leaveRoom, sendAttack, sendEvent, sendInput, sendRestart } from "../net/session";
 import { latest, sampleOther } from "../net/movement";
-import { markSwing, swingAt } from "../net/combat";
+import { markSwing, selfStat, swingAt } from "../net/combat";
 
 type Vec = { dx: number; dz: number };
 type Self = { x: number; z: number; dir: number; ready: boolean };
@@ -25,6 +24,14 @@ type Self = { x: number; z: number; dir: number; ready: boolean };
 const EYE_HEIGHT = 1.5;
 /** Swing animation length (ms). Purely visual; the server owns the real cooldown. */
 const SWING_MS = 300;
+
+/** Look of each pickup kind (weapons + event items). */
+const PICKUP_STYLE: Record<string, { color: string; glow: number }> = {
+  fast: { color: "#38a3ff", glow: 0.25 },
+  heavy: { color: "#5b6672", glow: 0.2 },
+  golden: { color: "#ffcf3a", glow: 0.85 },
+  heal: { color: "#34c86a", glow: 0.6 },
+};
 
 /** One player. Own avatar is client-predicted; others are interpolated ~100ms back. */
 function PlayerAvatar({
@@ -35,26 +42,25 @@ function PlayerAvatar({
 }: {
   id: string;
   isMe: boolean;
-  /** true when this is the local player rendered in first-person (hide the body). */
   fpSelf: boolean;
   self: MutableRefObject<Self>;
 }) {
-  const g = useRef<Group>(null); // world transform (position + facing)
-  const tip = useRef<Group>(null); // ragdoll tip-over on death (client-only)
-  const hammer = useRef<Group>(null); // swing pivot
-  const dead = useRef(0); // 0..1 ragdoll progress
+  const g = useRef<Group>(null);
+  const tip = useRef<Group>(null);
+  const hammer = useRef<Group>(null);
+  const dead = useRef(0);
 
   const color = useGame((s) => PLAYER_COLORS[s.players[id]?.colorIndex ?? 1]);
   const name = useGame((s) => s.players[id]?.name ?? "");
   const hp = useGame((s) => s.players[id]?.hp ?? HP_MAX);
   const alive = useGame((s) => s.players[id]?.alive ?? true);
   const connected = useGame((s) => s.players[id]?.connected ?? true);
+  const hammerKind = useGame((s) => s.players[id]?.hammer ?? "mid");
 
   useFrame((_, dt) => {
     const grp = g.current;
     if (!grp) return;
 
-    // position + facing
     if (isMe) {
       grp.position.set(self.current.x, 0, self.current.z);
       grp.rotation.y = self.current.dir;
@@ -66,14 +72,12 @@ function PlayerAvatar({
       }
     }
 
-    // ragdoll: tip over + sink when dead
     dead.current += ((alive ? 0 : 1) - dead.current) * (1 - Math.exp(-dt * 6));
     if (tip.current) {
       tip.current.rotation.z = dead.current * 1.45;
       tip.current.position.y = -dead.current * 0.3;
     }
 
-    // hammer swing (driven by the shared swingAt map)
     if (hammer.current) {
       const started = swingAt[id] ?? -1;
       const t = started > 0 ? (performance.now() - started) / SWING_MS : 2;
@@ -83,11 +87,11 @@ function PlayerAvatar({
   });
 
   const ratio = Math.max(0, Math.min(1, hp / HP_MAX));
+  const golden = hammerKind === "golden";
 
   return (
     <group ref={g}>
       <group ref={tip}>
-        {/* body — hidden for the local first-person avatar so it never blocks the view */}
         {!fpSelf && (
           <>
             <mesh position={[0, 0.62, 0]} castShadow>
@@ -102,7 +106,6 @@ function PlayerAvatar({
               <boxGeometry args={[0.44, 0.42, 0.44]} />
               <meshStandardMaterial color="#f0c9a0" />
             </mesh>
-            {/* facing nose so others can read which way you point */}
             <mesh position={[0, 1.25, 0.26]}>
               <boxGeometry args={[0.14, 0.14, 0.08]} />
               <meshStandardMaterial color="#ffffff" />
@@ -110,20 +113,25 @@ function PlayerAvatar({
           </>
         )}
 
-        {/* held hammer (always shown — it's the first-person view-model too) */}
+        {/* held hammer (also the first-person view-model); glows gold with the power weapon */}
         <group ref={hammer} position={[0.34, 1.02, 0.16]}>
           <mesh position={[0, 0.34, 0]} castShadow>
             <cylinderGeometry args={[0.05, 0.05, 0.8, 8]} />
             <meshStandardMaterial color="#5a3a1e" />
           </mesh>
           <mesh position={[0, 0.78, 0]} castShadow>
-            <boxGeometry args={[0.3, 0.26, 0.26]} />
-            <meshStandardMaterial color="#c9d2da" metalness={0.5} roughness={0.35} />
+            <boxGeometry args={golden ? [0.42, 0.36, 0.36] : [0.3, 0.26, 0.26]} />
+            <meshStandardMaterial
+              color={golden ? "#ffcf3a" : "#c9d2da"}
+              emissive={golden ? "#ffcf3a" : "#000000"}
+              emissiveIntensity={golden ? 0.7 : 0}
+              metalness={0.5}
+              roughness={0.35}
+            />
           </mesh>
         </group>
       </group>
 
-      {/* name + health, upright above the head (not for your own FP avatar) */}
       {!fpSelf && (
         <Html position={[0, 1.85, 0]} center distanceFactor={15} zIndexRange={[10, 0]} className="pointer-events-none">
           <div className="flex flex-col items-center gap-0.5" style={{ opacity: connected ? 1 : 0.45 }}>
@@ -141,20 +149,110 @@ function PlayerAvatar({
                   overflow: "hidden",
                 }}
               >
-                <div
-                  style={{
-                    width: `${ratio * 100}%`,
-                    height: "100%",
-                    background: hpColor(ratio),
-                    transition: "width 120ms linear",
-                  }}
-                />
+                <div style={{ width: `${ratio * 100}%`, height: "100%", background: hpColor(ratio), transition: "width 120ms linear" }} />
               </div>
             )}
           </div>
         </Html>
       )}
     </group>
+  );
+}
+
+/** Arena floor + shrinking safe zone. The danger floor is revealed as the safe
+ *  disc (scaled to zoneRadius each frame) shrinks over it. */
+function Arena() {
+  const arenaR = useGame((s) => s.arenaRadius);
+  const safe = useRef<Mesh>(null);
+  const zoneRing = useRef<Mesh>(null);
+
+  useFrame(() => {
+    const zr = useGame.getState().zoneRadius || arenaR;
+    if (safe.current) safe.current.scale.set(zr, zr, 1);
+    if (zoneRing.current) zoneRing.current.scale.set(zr, zr, 1);
+  });
+
+  return (
+    <>
+      {/* danger floor (lava) — full arena, sits under the safe disc */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+        <circleGeometry args={[arenaR, 64]} />
+        <meshStandardMaterial color="#ff7a5c" emissive="#e14b3d" emissiveIntensity={0.28} />
+      </mesh>
+      {/* safe floor — unit circle scaled to zoneRadius */}
+      <mesh ref={safe} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.006, 0]} receiveShadow>
+        <circleGeometry args={[1, 64]} />
+        <meshStandardMaterial color="#eaf6ff" />
+      </mesh>
+      {/* glowing safe-zone edge */}
+      <mesh ref={zoneRing} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]}>
+        <ringGeometry args={[0.965, 1, 64]} />
+        <meshBasicMaterial color="#38a3ff" />
+      </mesh>
+      {/* physical arena boundary */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
+        <ringGeometry args={[arenaR - 0.3, arenaR, 64]} />
+        <meshBasicMaterial color="#2c81d6" />
+      </mesh>
+    </>
+  );
+}
+
+function PickupMesh({ p }: { p: PickupView }) {
+  const spin = useRef<Group>(null);
+  useFrame((s) => {
+    if (!spin.current) return;
+    spin.current.rotation.y = s.clock.elapsedTime * 2;
+    spin.current.position.y = 1 + Math.sin(s.clock.elapsedTime * 3) * 0.16;
+  });
+  const cfg = PICKUP_STYLE[p.kind] ?? PICKUP_STYLE.fast;
+
+  return (
+    <group position={[p.x, 0, p.z]}>
+      <group ref={spin} position={[0, 1, 0]}>
+        {p.kind === "heal" ? (
+          <mesh castShadow>
+            <sphereGeometry args={[0.34, 16, 16]} />
+            <meshStandardMaterial color={cfg.color} emissive={cfg.color} emissiveIntensity={cfg.glow} />
+          </mesh>
+        ) : (
+          <group rotation={[0, 0, -0.5]}>
+            <mesh position={[0, 0.18, 0]}>
+              <cylinderGeometry args={[0.05, 0.05, 0.6, 8]} />
+              <meshStandardMaterial color="#5a3a1e" />
+            </mesh>
+            <mesh position={[0, 0.5, 0]} castShadow>
+              <boxGeometry args={[0.34, 0.28, 0.28]} />
+              <meshStandardMaterial color={cfg.color} emissive={cfg.color} emissiveIntensity={cfg.glow} metalness={0.5} roughness={0.3} />
+            </mesh>
+          </group>
+        )}
+      </group>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.04, 0]}>
+        <ringGeometry args={[0.5, 0.62, 24]} />
+        <meshBasicMaterial color={cfg.color} />
+      </mesh>
+    </group>
+  );
+}
+
+function Pickups() {
+  // gate re-renders on the id/active signature (positions never move)
+  const sig = useGame((s) =>
+    Object.keys(s.pickups)
+      .map((k) => k + (s.pickups[k].active ? "1" : "0"))
+      .join("|"),
+  );
+  void sig;
+  const pickups = useGame.getState().pickups;
+  return (
+    <>
+      {Object.entries(pickups)
+        .filter(([, p]) => p.active)
+        .map(([id, p]) => (
+          <PickupMesh key={id} p={p} />
+        ))}
+    </>
   );
 }
 
@@ -171,26 +269,24 @@ function World({
 }) {
   const self = useRef<Self>({ x: 0, z: 0, dir: 0, ready: false });
   const camYaw = useRef(0);
-  const maxR = ARENA_RADIUS - PLAYER_RADIUS;
   const { camera } = useThree();
 
   const meAlive = useGame((s) => (s.sessionId ? (s.players[s.sessionId]?.alive ?? true) : true));
   const meStunned = useGame((s) => (s.sessionId ? (s.players[s.sessionId]?.stunned ?? false) : false));
   const phase = useGame((s) => s.phase);
+  const arenaR = useGame((s) => s.arenaRadius);
+  const maxR = arenaR - PLAYER_RADIUS;
 
-  // First-person for the living local player; free spectator cam for the host and the dead.
   const fpActive = !isHost && !!sessionId && meAlive;
   const spectator = isHost || (!!sessionId && !meAlive);
 
-  // Lift to a spectator vantage the moment we start spectating (death / host).
   useEffect(() => {
     if (spectator) camera.position.set(0, 16, 22);
   }, [spectator, camera]);
 
   useFrame((state, dt) => {
-    if (!fpActive || !sessionId) return; // spectator: OrbitControls drives the camera
+    if (!fpActive || !sessionId) return;
 
-    // snap to the authoritative spawn the first time we hear about ourselves
     if (!self.current.ready) {
       const s = latest(sessionId);
       if (s) {
@@ -199,7 +295,6 @@ function World({
       }
     }
 
-    // client-side prediction from the same input we send up (suppressed while stunned)
     const { dx, dz } = input.current;
     if (!meStunned && phase === "playing" && (dx !== 0 || dz !== 0)) {
       self.current.x += dx * MOVE_SPEED * dt;
@@ -212,7 +307,6 @@ function World({
       self.current.dir = Math.atan2(dx, dz);
     }
 
-    // reconcile toward the server — snap hard on a big gap (knockback / teleport)
     const server = latest(sessionId);
     if (server) {
       const ex = server.x - self.current.x;
@@ -221,10 +315,11 @@ function World({
       const k = gap > 1.5 ? 1 : 1 - Math.exp(-dt * 8);
       self.current.x += ex * k;
       self.current.z += ez * k;
-      if (meStunned) self.current.dir = server.dir; // knockback spins us; follow it
+      if (meStunned) self.current.dir = server.dir;
     }
 
-    // first-person camera: eye at the player, look forward + a touch down
+    selfStat.r = Math.hypot(self.current.x, self.current.z);
+
     camYaw.current = lerpAngle(camYaw.current, self.current.dir, 1 - Math.exp(-dt * 12));
     const fx = Math.sin(camYaw.current);
     const fz = Math.cos(camYaw.current);
@@ -240,34 +335,21 @@ function World({
       <ambientLight intensity={0.8} />
       <directionalLight position={[10, 18, 8]} intensity={1.2} castShadow shadow-mapSize={[2048, 2048]} />
 
-      {/* arena floor */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <circleGeometry args={[ARENA_RADIUS, 64]} />
-        <meshStandardMaterial color="#eaf6ff" />
-      </mesh>
-      {/* boundary ring */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
-        <ringGeometry args={[ARENA_RADIUS - 0.3, ARENA_RADIUS, 64]} />
-        <meshBasicMaterial color="#38a3ff" />
-      </mesh>
+      <Arena />
       <Grid
-        args={[ARENA_RADIUS * 2, ARENA_RADIUS * 2]}
+        args={[arenaR * 2, arenaR * 2]}
         cellSize={2}
         cellColor="#cfe0ef"
         sectionSize={10}
         sectionColor="#a9c9e6"
         fadeDistance={60}
-        position={[0, 0.01, 0]}
+        position={[0, 0.012, 0]}
       />
 
+      <Pickups />
+
       {ids.map((id) => (
-        <PlayerAvatar
-          key={id}
-          id={id}
-          isMe={id === sessionId}
-          fpSelf={fpActive && id === sessionId}
-          self={self}
-        />
+        <PlayerAvatar key={id} id={id} isMe={id === sessionId} fpSelf={fpActive && id === sessionId} self={self} />
       ))}
 
       {spectator && <OrbitControls target={[0, 0.5, 0]} maxPolarAngle={Math.PI / 2.1} enableDamping />}
@@ -323,7 +405,7 @@ function AttackButton({ sessionId }: { sessionId?: string }) {
   const timer = useRef<number>();
 
   const swing = () => {
-    if (sessionId) markSwing(sessionId); // instant local feedback
+    if (sessionId) markSwing(sessionId);
     sendAttack();
   };
   const stop = () => {
@@ -396,6 +478,7 @@ export function GameScreen() {
   const isHost = useGame((s) => s.isHost);
   const phase = useGame((s) => s.phase);
   const conn = useGame((s) => s.conn);
+  const banner = useGame((s) => s.eventBanner);
   const aliveCount = useGame((s) => Object.values(s.players).filter((p) => p.alive).length);
   const meAlive = useGame((s) => (s.sessionId ? (s.players[s.sessionId]?.alive ?? true) : true));
   const meHp = useGame((s) => (s.sessionId ? (s.players[s.sessionId]?.hp ?? HP_MAX) : HP_MAX));
@@ -409,14 +492,50 @@ export function GameScreen() {
   const ratio = Math.max(0, Math.min(1, meHp / HP_MAX));
   const hammerLabel = HAMMERS[meHammer as HammerKind]?.label ?? meHammer;
 
+  // out-of-zone warning — polls the game loop's self radius (no per-frame re-render)
+  const [outside, setOutside] = useState(false);
+  useEffect(() => {
+    const t = window.setInterval(() => {
+      const st = useGame.getState();
+      const sid = st.sessionId;
+      const alive = sid ? (st.players[sid]?.alive ?? true) : true;
+      setOutside(!st.isHost && alive && st.phase === "playing" && selfStat.r > st.zoneRadius + 0.15);
+    }, 150);
+    return () => window.clearInterval(t);
+  }, []);
+
   return (
     <div className="fixed inset-0">
       <Canvas shadows camera={{ position: [0, 12, 16], fov: 50 }}>
         <World ids={ids} sessionId={sessionId} isHost={isHost} input={input} />
       </Canvas>
 
+      {/* out-of-zone red vignette */}
+      {outside && (
+        <>
+          <div className="pointer-events-none fixed inset-0 z-10" style={{ boxShadow: "inset 0 0 120px 40px rgba(225,75,61,0.55)" }} />
+          <div className="fixed inset-x-0 top-24 z-10 flex justify-center">
+            <div className="rounded-full bg-coral px-4 py-1.5 text-sm font-bold text-white shadow">
+              ⚠ ออกนอกเขตปลอดภัย — รีบกลับเข้าวง!
+            </div>
+          </div>
+        </>
+      )}
+
       {canControl && <Joystick input={input} />}
       {canControl && <AttackButton sessionId={sessionId} />}
+
+      {/* Host: trigger random events */}
+      {isHost && playing && (
+        <div className="fixed bottom-6 left-1/2 z-20 flex -translate-x-1/2 gap-2">
+          <button className="pill" onClick={() => sendEvent("golden")}>
+            ⚡ ค้อนทองคำ
+          </button>
+          <button className="pill" onClick={() => sendEvent("heal")}>
+            💚 ออร์บฮีล
+          </button>
+        </div>
+      )}
 
       <div className="hud">
         <div>
@@ -426,27 +545,31 @@ export function GameScreen() {
           <div className="mt-1.5 flex items-center gap-2">
             <span className="text-[11px] font-bold">🔨 {hammerLabel}</span>
             <div className="h-[9px] w-[120px] overflow-hidden rounded-full bg-line">
-              <div
-                className="h-full rounded-full"
-                style={{ width: `${ratio * 100}%`, background: hpColor(ratio), transition: "width 120ms linear" }}
-              />
+              <div className="h-full rounded-full" style={{ width: `${ratio * 100}%`, background: hpColor(ratio), transition: "width 120ms linear" }} />
             </div>
             <span className="text-[11px] font-bold">{Math.ceil(meHp)}</span>
           </div>
         )}
-        {!isHost && !meAlive && playing && (
-          <div className="muted mt-1 text-[11px]">☠️ คุณตกรอบแล้ว — หมุนดูสนามได้</div>
-        )}
+        {!isHost && !meAlive && playing && <div className="muted mt-1 text-[11px]">☠️ คุณตกรอบแล้ว — หมุนดูสนามได้</div>}
         {isHost && <div className="muted text-[11px]">มุมมองเจ้าภาพ · ลากเพื่อหมุนกล้อง</div>}
       </div>
 
+      {/* event banner */}
+      {banner && (
+        <div className="fixed inset-x-0 top-3 z-20 flex justify-center">
+          <div className="rounded-full bg-yellow px-5 py-2 font-display text-base font-extrabold text-ink shadow-soft">
+            {banner}
+          </div>
+        </div>
+      )}
+
       {conn === "reconnecting" && (
-        <div className="fixed inset-x-0 top-16 z-20 flex justify-center">
+        <div className="fixed inset-x-0 top-16 z-30 flex justify-center">
           <div className="pill">กำลังเชื่อมต่อใหม่…</div>
         </div>
       )}
 
-      <button className="btn btn--ghost fixed right-4 top-3 z-20 w-auto px-4 py-2 text-sm" onClick={leaveRoom}>
+      <button className="btn btn--ghost fixed right-4 top-3 z-30 w-auto px-4 py-2 text-sm" onClick={leaveRoom}>
         ออก
       </button>
 
