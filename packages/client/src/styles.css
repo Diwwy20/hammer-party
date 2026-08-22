@@ -1,0 +1,721 @@
+/* ============================================================================
+   Hammer Party — cartoon-minimal theme
+   Bright sky, white rounded cards, chunky "candy" buttons with a bottom lip,
+   Baloo Thai 2 (rounded display) + Sarabun (body). Flat, friendly, uncluttered.
+   ========================================================================== */
+
+:root {
+  /* sky */
+  --sky-1: #7fc4ff;
+  --sky-2: #bfe4ff;
+  --sky-3: #eaf6ff;
+
+  /* ink */
+  --ink: #22303f;
+  --ink-soft: #5d6f82;
+  --ink-faint: #93a3b4;
+
+  /* surfaces */
+  --card: #ffffff;
+  --card-2: #f3f8fd;
+  --line: #e2ebf4;
+
+  /* candy accents (each has a darker "lip" for the 3D button edge) */
+  --blue: #38a3ff;
+  --blue-d: #2c81d6;
+  --green: #34c86a;
+  --green-d: #24a355;
+  --coral: #ff6f61;
+  --coral-d: #e14b3d;
+  --yellow: #ffc93c;
+  --yellow-d: #e8a91f;
+  --purple: #8b7cf0;
+  --purple-d: #6f5fd6;
+
+  --radius: 22px;
+  --radius-sm: 14px;
+  --shadow: 0 12px 26px rgba(52, 90, 130, 0.16);
+  --shadow-sm: 0 6px 14px rgba(52, 90, 130, 0.14);
+
+  --font-display: "Baloo Thai 2", "Sarabun", system-ui, sans-serif;
+  --font-body: "Sarabun", system-ui, "Leelawadee UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* ── Screen shell ───────────────────────────────────────────────────────────*/
+.screen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  color: var(--ink);
+  font-family: var(--font-body);
+  background: linear-gradient(180deg, var(--sky-1) 0%, var(--sky-2) 42%, var(--sky-3) 100%);
+  overflow: hidden;
+  isolation: isolate;
+}
+/* soft floating bubbles — playful but minimal */
+.screen::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image:
+    radial-gradient(circle at 14% 22%, rgba(255, 255, 255, 0.5) 0 42px, transparent 44px),
+    radial-gradient(circle at 86% 16%, rgba(255, 255, 255, 0.38) 0 26px, transparent 28px),
+    radial-gradient(circle at 78% 74%, rgba(255, 255, 255, 0.34) 0 60px, transparent 62px),
+    radial-gradient(circle at 20% 82%, rgba(255, 255, 255, 0.3) 0 34px, transparent 36px);
+  pointer-events: none;
+}
+
+.screen__scroll {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px 18px 26px;
+  gap: 16px;
+}
+.center-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 22px 18px;
+  width: 100%;
+}
+.row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+}
+
+/* ── Top bar ────────────────────────────────────────────────────────────────*/
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.72);
+  border-bottom: 2px solid var(--line);
+  backdrop-filter: blur(8px);
+}
+.brand {
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  font-size: 18px;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.brand small {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+
+/* ── Pills ──────────────────────────────────────────────────────────────────*/
+.pill {
+  background: var(--card);
+  border: 2px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 13px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  color: var(--ink);
+}
+.pill--code {
+  letter-spacing: 0.18em;
+  color: var(--blue-d);
+  background: #eaf4ff;
+  border-color: #cfe6ff;
+}
+
+/* ── Cards / panels ─────────────────────────────────────────────────────────*/
+.panel {
+  width: 100%;
+  max-width: 460px;
+  border-radius: var(--radius);
+  padding: 18px;
+  color: var(--ink);
+  background: var(--card);
+  border: 2px solid var(--line);
+  box-shadow: var(--shadow);
+}
+.panel__title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--ink);
+  margin: 0 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.muted {
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+.status-line {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 16px;
+  text-align: center;
+  color: var(--ink-soft);
+}
+.status-line .glow {
+  color: var(--blue-d);
+}
+
+/* ── Divider (minimal) ──────────────────────────────────────────────────────*/
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 300px;
+}
+.divider::before,
+.divider::after {
+  content: "";
+  flex: 1;
+  height: 2px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.7);
+}
+.divider span {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 8px;
+}
+
+/* ── Hero title ─────────────────────────────────────────────────────────────*/
+.hero-title {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(38px, 11vw, 66px);
+  line-height: 1.02;
+  text-align: center;
+  color: #fff;
+  margin: 0;
+  text-shadow:
+    0 3px 0 var(--blue-d),
+    0 6px 0 rgba(0, 0, 0, 0.12),
+    0 10px 18px rgba(30, 70, 120, 0.35);
+  -webkit-text-stroke: 2px var(--blue-d);
+  paint-order: stroke fill;
+}
+.hero-sub {
+  font-family: var(--font-display);
+  font-weight: 600;
+  color: #fff;
+  font-size: clamp(15px, 4vw, 19px);
+  text-align: center;
+  text-shadow: 0 2px 0 rgba(44, 129, 214, 0.7);
+  margin: 4px 0 0;
+}
+
+/* ── Character stage ────────────────────────────────────────────────────────*/
+.stage {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  flex: 1 1 auto;
+  min-height: 260px;
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: linear-gradient(180deg, #cdebff 0%, #eaf7ff 70%, #ffffff 100%);
+  border: 2px solid var(--line);
+  box-shadow: var(--shadow-sm);
+}
+.stage__canvas {
+  position: absolute;
+  inset: 0;
+}
+.stage__plate {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 18px;
+  border-radius: 999px;
+  background: #fff;
+  border: 2px solid var(--line);
+  box-shadow: var(--shadow-sm);
+}
+.stage__plate .name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 19px;
+  color: var(--ink);
+}
+.stage__hint {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-faint);
+  background: rgba(255, 255, 255, 0.7);
+  padding: 3px 9px;
+  border-radius: 999px;
+}
+
+/* ── Swatches ───────────────────────────────────────────────────────────────*/
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+}
+.swatch {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 3px solid #fff;
+  cursor: pointer;
+  padding: 0;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.1s ease;
+}
+.swatch:active {
+  transform: scale(0.9);
+}
+.swatch--active {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px #cfe6ff, var(--shadow-sm);
+}
+
+/* ── Roster chips ───────────────────────────────────────────────────────────*/
+.roster {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--card-2);
+  border: 2px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 13px 5px 6px;
+  font-weight: 600;
+  font-size: 13px;
+  max-width: 100%;
+  color: var(--ink);
+}
+.chip__dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 800;
+  color: #fff;
+  border: 2px solid #fff;
+}
+.chip__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chip--me {
+  border-color: var(--blue);
+  background: #eaf4ff;
+}
+.chip--ready {
+  background: #e5f8ec;
+  border-color: #b6e9c9;
+  color: var(--green-d);
+}
+
+/* host: roster cards grid */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 12px;
+  width: 100%;
+}
+.card {
+  border-radius: var(--radius-sm);
+  padding: 11px 13px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  font-size: 15px;
+  background: var(--card-2);
+  border: 2px solid var(--line);
+  color: var(--ink);
+}
+.card--ready {
+  background: #e5f8ec;
+  border-color: #b6e9c9;
+}
+
+/* ── Chunky candy buttons (bottom lip) ──────────────────────────────────────*/
+.btn {
+  appearance: none;
+  border: none;
+  border-radius: 18px;
+  padding: 15px 20px;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  width: 100%;
+  max-width: 460px;
+  color: #fff;
+  transition: transform 0.05s ease, box-shadow 0.05s ease, filter 0.1s ease;
+}
+.btn:active {
+  transform: translateY(4px);
+}
+.btn:disabled {
+  cursor: not-allowed;
+  filter: grayscale(0.55) opacity(0.75);
+}
+.btn--gold {
+  background: var(--blue);
+  box-shadow: 0 5px 0 var(--blue-d), var(--shadow-sm);
+}
+.btn--gold:active {
+  box-shadow: 0 1px 0 var(--blue-d), var(--shadow-sm);
+}
+.btn--jade {
+  background: var(--green);
+  box-shadow: 0 5px 0 var(--green-d), var(--shadow-sm);
+}
+.btn--jade:active {
+  box-shadow: 0 1px 0 var(--green-d), var(--shadow-sm);
+}
+.btn--danger {
+  background: var(--coral);
+  box-shadow: 0 5px 0 var(--coral-d), var(--shadow-sm);
+}
+.btn--danger:active {
+  box-shadow: 0 1px 0 var(--coral-d), var(--shadow-sm);
+}
+.btn--ghost {
+  color: var(--ink-soft);
+  background: #fff;
+  border: 2px solid var(--line);
+  box-shadow: var(--shadow-sm);
+  font-size: 15px;
+  padding: 12px 18px;
+}
+
+/* ── Forms ──────────────────────────────────────────────────────────────────*/
+.field {
+  display: block;
+  width: 100%;
+  margin-bottom: 14px;
+}
+.field__label {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 7px;
+  color: var(--ink);
+}
+.input {
+  width: 100%;
+  border-radius: var(--radius-sm);
+  border: 2px solid var(--line);
+  background: var(--card-2);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 18px;
+  font-weight: 600;
+  padding: 14px 16px;
+  outline: none;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+.input::placeholder {
+  color: var(--ink-faint);
+}
+.input--code {
+  font-family: var(--font-display);
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--blue-d);
+}
+.input:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 4px #d5ecff;
+}
+.error-text {
+  color: #fff;
+  background: var(--coral);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-weight: 600;
+  text-align: center;
+}
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--blue-d);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  padding: 4px;
+}
+
+/* ── QR / host ──────────────────────────────────────────────────────────────*/
+.qr-card {
+  background: #fff;
+  border-radius: var(--radius);
+  padding: 16px;
+  display: grid;
+  place-items: center;
+  box-shadow: var(--shadow);
+  border: 2px solid var(--line);
+}
+.code-big {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(46px, 9vw, 88px);
+  letter-spacing: 0.1em;
+  line-height: 1;
+  color: var(--blue);
+  -webkit-text-stroke: 2px var(--blue-d);
+  paint-order: stroke fill;
+}
+
+/* ── Splash spinner ─────────────────────────────────────────────────────────*/
+.spin {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 4px solid rgba(255, 255, 255, 0.6);
+  border-top-color: #fff;
+  animation: spin 0.85s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ── in-game HUD ────────────────────────────────────────────────────────────*/
+.hud {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.92);
+  border: 2px solid var(--line);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 13px;
+  box-shadow: var(--shadow-sm);
+}
+.hud b {
+  font-family: var(--font-display);
+  color: var(--blue-d);
+}
+
+/* ── sticky action bar ──────────────────────────────────────────────────────*/
+.actionbar {
+  padding: 14px 18px calc(14px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  background: linear-gradient(0deg, rgba(234, 246, 255, 0.95), transparent);
+}
+
+/* ── Splash / loading ───────────────────────────────────────────────────────*/
+.splash__mark {
+  font-size: 60px;
+  filter: drop-shadow(0 8px 12px rgba(30, 70, 120, 0.3));
+  animation: bob 1.6s ease-in-out infinite;
+}
+@keyframes bob {
+  0%, 100% { transform: translateY(0) rotate(-10deg); }
+  50% { transform: translateY(-12px) rotate(10deg); }
+}
+.progress {
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.progress__track {
+  flex: 1;
+  height: 16px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.6);
+  border: 2px solid #fff;
+  overflow: hidden;
+  box-shadow: inset 0 2px 4px rgba(52, 90, 130, 0.18);
+}
+.progress__bar {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--yellow), #ffdf7a);
+  transition: width 0.15s ease-out;
+}
+.progress__pct {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 18px;
+  color: #fff;
+  min-width: 52px;
+  text-align: right;
+  text-shadow: 0 2px 0 rgba(44, 129, 214, 0.6);
+}
+.tip {
+  max-width: 420px;
+  text-align: center;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.5;
+  background: rgba(255, 255, 255, 0.66);
+  border-radius: 999px;
+  padding: 8px 16px;
+}
+.tip__k {
+  font-family: var(--font-display);
+  color: var(--blue-d);
+  font-weight: 700;
+  margin-right: 4px;
+}
+
+/* ── Customizer (cosmetic tabs + options) ───────────────────────────────────*/
+.customizer {
+  width: 100%;
+  max-width: 480px;
+  align-self: center;
+  flex: 0 0 auto;
+}
+.tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+  justify-content: center;
+}
+.tab {
+  appearance: none;
+  border: 2px solid var(--line);
+  background: #fff;
+  color: var(--ink-soft);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 13px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+.tab--active {
+  color: #fff;
+  background: var(--blue);
+  border-color: var(--blue);
+  box-shadow: 0 3px 0 var(--blue-d);
+}
+.options {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 4px 2px 8px;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+  justify-content: safe center;
+}
+.opt {
+  flex: 0 0 auto;
+  width: 70px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 9px 4px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  background: #fff;
+  border: 2px solid var(--line);
+  transition: transform 0.08s ease;
+}
+.opt:active {
+  transform: scale(0.94);
+}
+.opt__icon {
+  font-size: 26px;
+  line-height: 1;
+}
+.opt__label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+.opt--active {
+  background: #eaf4ff;
+  border-color: var(--blue);
+  box-shadow: 0 3px 0 #cfe6ff;
+}
+.opt--active .opt__label {
+  color: var(--blue-d);
+}
+
+/* ── Roster strip (compact, horizontal) ─────────────────────────────────────*/
+.roster-strip {
+  width: 100%;
+  max-width: 480px;
+  align-self: center;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+  min-height: 40px;
+}
+.roster-strip__count {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.roster-strip__row {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+.roster-strip__row .chip {
+  flex: 0 0 auto;
+}

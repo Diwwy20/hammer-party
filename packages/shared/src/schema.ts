@@ -1,5 +1,14 @@
 import { Schema, MapSchema, defineTypes } from "@colyseus/schema";
-import { ARENA_RADIUS, DEFAULT_HAMMER, HP_MAX } from "./constants";
+import {
+  ARENA_RADIUS,
+  DEFAULT_BACK_INDEX,
+  DEFAULT_COLOR_INDEX,
+  DEFAULT_FACE_INDEX,
+  DEFAULT_HAMMER,
+  DEFAULT_HAT_INDEX,
+  HP_MAX,
+  type GamePhase,
+} from "./constants";
 
 /**
  * Colyseus @colyseus/schema state — the "truth" the server owns and broadcasts
@@ -15,7 +24,7 @@ import { ARENA_RADIUS, DEFAULT_HAMMER, HP_MAX } from "./constants";
  *     regardless of how the bundler (esbuild/tsx/tsc) treats class fields.
  */
 
-export type GamePhase = "lobby" | "playing" | "ended";
+export type { GamePhase };
 
 export class Player extends Schema {
   declare name: string;
@@ -34,6 +43,8 @@ export class Player extends Schema {
   declare ready: boolean;
   declare colorIndex: number;
   declare hatIndex: number;
+  declare faceIndex: number;
+  declare backIndex: number;
 
   constructor() {
     super();
@@ -45,8 +56,10 @@ export class Player extends Schema {
     this.alive = true;
     this.hammer = DEFAULT_HAMMER;
     this.ready = false;
-    this.colorIndex = 0;
-    this.hatIndex = 0;
+    this.colorIndex = DEFAULT_COLOR_INDEX;
+    this.hatIndex = DEFAULT_HAT_INDEX;
+    this.faceIndex = DEFAULT_FACE_INDEX;
+    this.backIndex = DEFAULT_BACK_INDEX;
   }
 }
 
@@ -61,6 +74,8 @@ defineTypes(Player, {
   ready: "boolean",
   colorIndex: "number",
   hatIndex: "number",
+  faceIndex: "number",
+  backIndex: "number",
 });
 
 export class GameState extends Schema {
@@ -70,12 +85,19 @@ export class GameState extends Schema {
   /** ms since match start; -1 while in lobby */
   declare elapsedMs: number;
 
+  /** Human-readable room code shown on the Host screen / used to join. */
+  declare code: string;
+  /** sessionId of the invisible Host (director on the big screen); "" if none. */
+  declare hostSessionId: string;
+
   constructor() {
     super();
     this.players = new MapSchema<Player>();
     this.phase = "lobby";
     this.arenaRadius = ARENA_RADIUS;
     this.elapsedMs = -1;
+    this.code = "";
+    this.hostSessionId = "";
   }
 }
 
@@ -84,4 +106,6 @@ defineTypes(GameState, {
   phase: "string",
   arenaRadius: "number",
   elapsedMs: "number",
+  code: "string",
+  hostSessionId: "string",
 });

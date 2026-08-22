@@ -13,9 +13,12 @@
     "@hammer/shared": "workspace:*",
     "@react-three/drei": "^9.114.0",
     "@react-three/fiber": "^8.17.10",
+    "@tailwindcss/vite": "^4.3.3",
     "colyseus.js": "^0.15.26",
+    "qrcode.react": "^4.2.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "tailwindcss": "^4.3.3",
     "three": "^0.169.0",
     "zustand": "^5.0.0"
   },

@@ -7,15 +7,26 @@
       content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
     />
     <title>Hammer Party</title>
+
+    <!-- Cartoon-minimal type: Baloo Thai 2 (rounded chunky display) + Sarabun (body).
+         Both cover Thai + Latin; system fallbacks keep the UI usable offline. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Baloo+Thai+2:wght@500;600;700;800&family=Sarabun:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+
     <style>
       html,
       body,
       #root {
         height: 100%;
         margin: 0;
-        background: #0e1116;
+        background: #dff0ff;
         overflow: hidden;
-        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        font-family: "Sarabun", system-ui, -apple-system, "Segoe UI", "Leelawadee UI", sans-serif;
+        color: #22303f;
         -webkit-tap-highlight-color: transparent;
         overscroll-behavior: none;
       }

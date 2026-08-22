@@ -9,7 +9,9 @@ const gameServer = new Server({
   transport: new WebSocketTransport(),
 });
 
-gameServer.define(ROOM_NAME, GameRoom);
+// filterBy(['code']) groups matchmaking by room code: the Host creates a room
+// with a code, and players who join with the same code land in that exact room.
+gameServer.define(ROOM_NAME, GameRoom).filterBy(["code"]);
 
 gameServer
   .listen(port)

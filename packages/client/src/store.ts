@@ -1,6 +1,14 @@
 import { create } from "zustand";
+import {
+  DEFAULT_BACK_INDEX,
+  DEFAULT_COLOR_INDEX,
+  DEFAULT_FACE_INDEX,
+  DEFAULT_HAT_INDEX,
+  type GamePhase,
+} from "@hammer/shared";
 
-export type ConnStatus = "connecting" | "connected" | "error";
+/** Client connection lifecycle (distinct from the server-side game phase). */
+export type Conn = "idle" | "connecting" | "open" | "error";
 
 /** A flattened, render-friendly view of a Player mirrored out of room.state. */
 export interface PlayerView {
@@ -8,29 +16,63 @@ export interface PlayerView {
   x: number;
   z: number;
   ready: boolean;
+  colorIndex: number;
+  hatIndex: number;
+  faceIndex: number;
+  backIndex: number;
+}
+
+/** Just the cosmetic slots — what CharacterPreview needs to draw an avatar. */
+export interface Cosmetic {
+  colorIndex: number;
+  hatIndex: number;
+  faceIndex: number;
+  backIndex: number;
 }
 
 interface GameStore {
-  status: ConnStatus;
+  conn: Conn;
+  /** false until the entry splash/loading screen has finished. */
+  booted: boolean;
+  error?: string;
+  /** true when THIS client is the big-screen Host (director, not a player). */
+  isHost: boolean;
   roomId?: string;
   sessionId?: string;
+
+  // mirrored from GameState
+  code: string;
+  phase: GamePhase;
+  hostSessionId: string;
   players: Record<string, PlayerView>;
 
   set: (patch: Partial<GameStore>) => void;
-  upsertPlayer: (id: string, p: PlayerView) => void;
-  removePlayer: (id: string) => void;
+  reset: () => void;
 }
 
-export const useGame = create<GameStore>((set) => ({
-  status: "connecting",
-  players: {},
+const initial = {
+  conn: "idle" as Conn,
+  booted: false,
+  error: undefined as string | undefined,
+  isHost: false,
+  roomId: undefined as string | undefined,
+  sessionId: undefined as string | undefined,
+  code: "",
+  phase: "lobby" as GamePhase,
+  hostSessionId: "",
+  players: {} as Record<string, PlayerView>,
+};
 
+export const useGame = create<GameStore>((set) => ({
+  ...initial,
   set: (patch) => set(patch),
-  upsertPlayer: (id, p) => set((s) => ({ players: { ...s.players, [id]: p } })),
-  removePlayer: (id) =>
-    set((s) => {
-      const next = { ...s.players };
-      delete next[id];
-      return { players: next };
-    }),
+  reset: () => set({ ...initial }),
 }));
+
+/** Fallback cosmetics before the server echoes our own player back. */
+export const FALLBACK_COSMETIC: Cosmetic = {
+  colorIndex: DEFAULT_COLOR_INDEX,
+  hatIndex: DEFAULT_HAT_INDEX,
+  faceIndex: DEFAULT_FACE_INDEX,
+  backIndex: DEFAULT_BACK_INDEX,
+};
