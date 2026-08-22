@@ -5,14 +5,18 @@ import {
   MAX_PLAYERS,
   MIN_PLAYERS_TO_START,
   PLAYER_COLORS,
+  STAGES,
+  STAGE_ORDER,
 } from "@hammer/shared";
 import { useGame } from "../store";
-import { sendStart, leaveRoom } from "../net/session";
+import { sendStart, sendStage, leaveRoom } from "../net/session";
+import { Leaderboard } from "../components/Leaderboard";
 
 export function HostScreen() {
   const players = useGame((s) => s.players);
   const code = useGame((s) => s.code);
   const phase = useGame((s) => s.phase);
+  const stageId = useGame((s) => s.stageId);
 
   const ids = Object.keys(players);
   const readyCount = ids.filter((id) => players[id].ready).length;
@@ -78,6 +82,23 @@ export function HostScreen() {
             )}
           </div>
         </div>
+
+        <div className="panel w-full max-w-[980px]">
+          <p className="panel__title">เลือกด่าน</p>
+          <div className="row justify-start gap-2">
+            {STAGE_ORDER.map((id) => (
+              <button
+                key={id}
+                className={"tab" + (id === stageId ? " tab--active" : "")}
+                onClick={() => sendStage(id)}
+              >
+                {STAGES[id].label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <Leaderboard />
 
         <p className="muted text-center">
           ⚙ เลือด {HP_MAX} · เวลาสูงสุด {MATCH_MAX_MINUTES} นาที

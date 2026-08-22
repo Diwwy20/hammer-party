@@ -26,6 +26,8 @@ export const eventSchema = z.object({ kind: z.enum(["golden", "heal"]) });
 
 export const prankSchema = z.object({ kind: z.enum(["banana", "bomb"]) });
 
+export const stageSchema = z.object({ stageId: z.string().max(32) });
+
 /** Tiny profanity list (English + a little Thai). Owner can extend for the event. */
 const BAD_WORDS = [
   "fuck",

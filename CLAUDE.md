@@ -45,14 +45,19 @@ Distilled project knowledge lives in `.claude/skills/`. Load only what a task ne
   - **SFX**: synthesized WebAudio (no assets, offline) — `client/src/audio.ts`. Verified with headless smokes + in-browser run.
   - ⚠️ Still owed (event hardening): a **real ~25-device load test** (fps/latency) and a full dress rehearsal + LAN fallback;
     reconnection is wired but untested on real flaky wifi.
-- **Phase 05 (Post-event: stages via config + DB leaderboard) is the last, optional phase.**
+- **Phase 05** (Post-event: stages + leaderboard) — **done**.
+  - **3 stages** in `packages/shared/src/stages.ts` (`colosseum`/`pit`/`grand`, each with its own radius/zone/pickups/wall-slam/theme);
+    **Host picks the stage** in the lobby (`ClientMsg.SetStage`, host+lobby only) → server applies it in `beginMatch`; client renders per-theme colors (`STAGE_THEMES` in `GameScreen`).
+  - **Monthly leaderboard**: server persists each finished match to `packages/server/data/leaderboard.json` (`server/src/leaderboard.ts`, aggregate-by-name) and serves it over **HTTP** (`GET /api/leaderboard` on the same port via **express**, added in `server/src/index.ts`). Host lobby shows it via **TanStack Query** (`client/src/components/Leaderboard.tsx`) — the one place TanStack is allowed.
+  - Verified: headless smoke (stage applies + match recorded) + in-browser (picker + leaderboard render, click-to-pick syncs).
+- **All 6 phases (00–05) done.** Remaining work is event-day hardening (25-device load test, dress rehearsal, LAN fallback).
 - Styling is **Tailwind v4 + shadcn (Base UI)** — see `ui-conventions`.
 
 ## 🔑 Non-negotiable rules
 - **`packages/shared/src/constants.ts` is the single source of truth** for every game value (HP, damage, tick, radius, cosmetic catalogs). Never hardcode a number elsewhere.
 - **Server is authoritative** (20Hz). Clients send input only and never decide outcomes. Never trust the client.
 - **No full networked physics/ragdoll.** Capsule movement + swing-angle hit checks + impulse knockback; death ragdoll is **client-only**, never synced.
-- **Stack is locked:** TS · Vite+React 18 (not Next) · Three.js/@react-three/fiber/drei · Zustand · Colyseus/@colyseus/schema · nipplejs (planned) · qrcode.react · Zod (thin, server-side). No TanStack/Redux/tRPC until a Phase 05 DB leaderboard.
+- **Stack is locked:** TS · Vite+React 18 (not Next) · Three.js/@react-three/fiber/drei · Zustand · Colyseus/@colyseus/schema · nipplejs · qrcode.react · Zod (thin, server-side) · express (leaderboard HTTP API) · **TanStack Query — ONLY for the Phase 05 leaderboard** (nothing else; game state still arrives via the Colyseus socket → Zustand). No Redux/tRPC.
 
 ## 🎨 Design & wording conventions (agreed with the owner)
 - **Cartoon-minimal** visual style (bright sky, white rounded cards, chunky candy buttons, rounded Baloo Thai 2 font). NOT dark/fantasy. See `ui-conventions`.

@@ -66,6 +66,7 @@ interface GameStore {
   pickups: Record<string, PickupView>;
   arenaRadius: number;
   zoneRadius: number;
+  stageId: string;
   stageTheme: string;
   eventBanner: string;
   awardsJson: string;
@@ -89,6 +90,7 @@ const initial = {
   pickups: {} as Record<string, PickupView>,
   arenaRadius: ARENA_RADIUS,
   zoneRadius: ARENA_RADIUS,
+  stageId: "",
   stageTheme: "",
   eventBanner: "",
   awardsJson: "",

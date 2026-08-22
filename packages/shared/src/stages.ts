@@ -36,6 +36,8 @@ export interface WallSlamConfig {
 
 export interface StageConfig {
   id: string;
+  /** short Thai label for the Host's stage picker (describes the vibe, not a lore name) */
+  label: string;
   /** drives client visuals only (floor tint, props) — not gameplay */
   theme: string;
   /** starting arena radius (m) — the physical wall; the zone shrinks inside it */
@@ -47,9 +49,10 @@ export interface StageConfig {
   wallSlam: WallSlamConfig;
 }
 
-/** First playtest stage — a colosseum-style ring. Values are tuned in playtests. */
+/** Balanced default — a colosseum-style ring. Values are tuned in playtests. */
 export const COLOSSEUM: StageConfig = {
   id: "colosseum",
+  label: "สนามมาตรฐาน",
   theme: "colosseum",
   radius: ARENA_RADIUS,
   spawnRadius: SPAWN_RADIUS,
@@ -70,10 +73,62 @@ export const COLOSSEUM: StageConfig = {
   wallSlam: { dmg: 12, stunMs: 400, minSpeed: 5 },
 };
 
-/** Every stage the game knows about (only one for now). */
+/** Close-quarters: a small hot pit — few weapons, hard walls, an early shrink. */
+export const PIT: StageConfig = {
+  id: "pit",
+  label: "แดนประชิด",
+  theme: "pit",
+  radius: 17,
+  spawnRadius: 17 * 0.7,
+  zone: {
+    startMs: 20_000,
+    endMs: 8 * 60_000,
+    minRadius: 2.5,
+    dmgPerSec: 9,
+  },
+  weaponSpawns: [
+    { kind: "heavy", x: 0, z: 0 },
+    { kind: "fast", x: 8, z: 0 },
+    { kind: "fast", x: -8, z: 0 },
+  ],
+  wallSlam: { dmg: 18, stunMs: 500, minSpeed: 4.5 },
+};
+
+/** Big battle: a wide arena, lots of pickups, a late but relentless shrink. */
+export const GRAND: StageConfig = {
+  id: "grand",
+  label: "สังเวียนใหญ่",
+  theme: "sky",
+  radius: 30,
+  spawnRadius: 30 * 0.68,
+  zone: {
+    startMs: 45_000,
+    endMs: 14 * 60_000,
+    minRadius: 3.5,
+    dmgPerSec: 6,
+  },
+  weaponSpawns: [
+    { kind: "heavy", x: 7, z: 7 },
+    { kind: "heavy", x: -7, z: -7 },
+    { kind: "heavy", x: 7, z: -7 },
+    { kind: "heavy", x: -7, z: 7 },
+    { kind: "fast", x: 15, z: 0 },
+    { kind: "fast", x: -15, z: 0 },
+    { kind: "fast", x: 0, z: 15 },
+    { kind: "fast", x: 0, z: -15 },
+  ],
+  wallSlam: { dmg: 10, stunMs: 350, minSpeed: 5.5 },
+};
+
+/** Every stage the game knows about. Order = display order in the Host picker. */
 export const STAGES: Record<string, StageConfig> = {
   [COLOSSEUM.id]: COLOSSEUM,
+  [PIT.id]: PIT,
+  [GRAND.id]: GRAND,
 };
+
+/** Stage ids in display order (object key order isn't guaranteed for UIs). */
+export const STAGE_ORDER: readonly string[] = [COLOSSEUM.id, PIT.id, GRAND.id];
 
 export const DEFAULT_STAGE_ID = COLOSSEUM.id;
 

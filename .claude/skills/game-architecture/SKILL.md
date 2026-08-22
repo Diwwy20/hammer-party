@@ -43,7 +43,8 @@ projecting a spectator camera for everyone.
 - **colyseus.js + interpolation** — receive state → delay ~100ms → draw (`client/src/net/session.ts`).
 - **nipplejs** (planned, movement) · **qrcode.react** (Host QR) · **Zod** (thin server input validation, planned).
 - **glTF `.glb`** assets later; cosmetics are currently procedural low-poly meshes.
-- **Not used:** TanStack/Redux/tRPC/react-hook-form (state arrives via socket). Add TanStack Query only for a Phase 05 DB leaderboard.
+- **express** (Phase 05) serves the leaderboard HTTP API on the Colyseus port; **TanStack Query** fetches it on the client — **the ONLY place TanStack is used**. Game state still flows Colyseus → Zustand.
+- **Not used:** Redux/tRPC/react-hook-form (state arrives via socket).
 
 ## Monorepo layout (pnpm workspaces, scope `@hammer/*`)
 `shared/` is the heart — client and server share one set of types & values.

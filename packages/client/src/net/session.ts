@@ -120,6 +120,7 @@ function applyState(state: any): void {
     winnerId: state.winnerId ?? "",
     arenaRadius: state.arenaRadius,
     zoneRadius: state.zoneRadius,
+    stageId: state.stageId ?? "",
     stageTheme: state.stageTheme ?? "",
     eventBanner: state.eventBanner ?? "",
     awardsJson: state.awardsJson ?? "",
@@ -188,6 +189,11 @@ export function sendEvent(kind: EventKind): void {
 /** Dead-player only: throw a prank (banana/bomb) at a random survivor. */
 export function sendPrank(kind: PrankKind): void {
   room?.send(ClientMsg.Prank, { kind });
+}
+
+/** Host-only: pick the stage for the next match (lobby only). */
+export function sendStage(stageId: string): void {
+  room?.send(ClientMsg.SetStage, { stageId });
 }
 
 /** Send movement intent (a normalised vector). The server decides the outcome. */

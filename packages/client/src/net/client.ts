@@ -8,4 +8,7 @@ import { Client } from "colyseus.js";
 export const SERVER_URL: string =
   (import.meta.env.VITE_SERVER_URL as string | undefined) ?? `ws://${location.hostname}:2567`;
 
+/** Same host/port as the WS, over HTTP — for the leaderboard API (Phase 05). */
+export const HTTP_URL: string = SERVER_URL.replace(/^ws/, "http");
+
 export const colyseus = new Client(SERVER_URL);

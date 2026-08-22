@@ -63,10 +63,16 @@ Cosmetics on in-game avatars, full Results/awards, Zod input validation + name f
 - ⚠️ **Still owed (do at the event):** a real ~25-device load test (fps/latency) + full dress rehearsal + LAN fallback; reconnection untested on flaky wifi. glTF models skipped (procedural is fine).
 ✅ Done when a match plays to Results with awards; cosmetics show in-arena; the build runs offline.
 
-## → NEXT: Phase 05 (Post-event — optional)
-
-## Phase 05 — Post-event (optional, cut if short on time) ⬜
+## Phase 05 — Post-event ✅
 New stages via config; DB stats + monthly leaderboard (TanStack Query enters here).
+- **3 stages** (`colosseum`/`pit`/`grand`) in `shared/src/stages.ts` — each with its own radius/zone/weaponSpawns/wallSlam/`label`/theme; `STAGE_ORDER` drives picker order.
+- **Host stage picker** in the lobby: `ClientMsg.SetStage` (host + lobby only, Zod-checked) → server sets `selectedStageId`, applied in `beginMatch`; lobby shows it via synced `GameState.stageId`. Client theme colors in `GameScreen`'s `STAGE_THEMES` (visual only).
+- **Leaderboard**: match results appended to `packages/server/data/leaderboard.json` (git-ignored) by `server/src/leaderboard.ts` (flat file, aggregate-by-name — no native DB, works offline); served by **express** at `GET /api/leaderboard` (+ `/api/health`) on the Colyseus port (`server/src/index.ts`). Client fetches with **TanStack Query** (`components/Leaderboard.tsx`, shown on the Host lobby) via `HTTP_URL` in `net/client.ts`. `QueryClientProvider` wraps App in `main.tsx`.
+- Verified: headless smoke (host picks `grand` → radius 30 applies → match plays to end → row written; `/api/leaderboard` aggregates) + in-browser (picker + standings render, click-to-pick round-trips).
+- ⚠️ TanStack is allowed ONLY here (leaderboard) — game state still flows Colyseus → Zustand. Leaderboard aggregates by display name (no accounts).
+✅ Done when the Host can pick a stage and the monthly leaderboard updates after matches.
+
+## 🎉 All phases (00–05) complete — remaining work is event-day hardening (real 25-device load test, dress rehearsal, LAN fallback, reconnection on flaky wifi).
 
 ---
 

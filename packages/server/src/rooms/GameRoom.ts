@@ -36,7 +36,8 @@ import {
   type StageConfig,
   type SwingEvent,
 } from "@hammer/shared";
-import { cleanName, cosmeticSchema, eventSchema, inputSchema, prankSchema, readySchema } from "../validate";
+import { cleanName, cosmeticSchema, eventSchema, inputSchema, prankSchema, readySchema, stageSchema } from "../validate";
+import { recordMatch, type MatchRow } from "../leaderboard";
 
 /** Per-player simulation state kept OUT of the synced schema (server-only). */
 interface CombatState {
@@ -89,6 +90,8 @@ export class GameRoom extends Room<GameState> {
 
   /** active stage config (data-driven). */
   private stage: StageConfig = COLOSSEUM;
+  /** stage the Host picked for the NEXT match (applied in beginMatch). */
+  private selectedStageId: string = DEFAULT_STAGE_ID;
   /** weapon pickup id → elapsedMs at which it respawns. */
   private pickupRespawnAt = new Map<string, number>();
   private eventPickupSeq = 0;
@@ -101,6 +104,9 @@ export class GameRoom extends Room<GameState> {
   onCreate(options?: JoinOptions) {
     const state = new GameState();
     state.code = (options?.code ?? "").toUpperCase();
+    // show the default stage in the lobby before the Host picks/starts
+    state.stageId = this.stage.id;
+    state.stageTheme = this.stage.theme;
     this.setState(state);
 
     this.setSimulationInterval((dt) => this.update(dt), 1000 / TICK_RATE);
@@ -171,6 +177,18 @@ export class GameRoom extends Room<GameState> {
     this.onMessage(ClientMsg.Prank, (client, msg) => {
       const parsed = prankSchema.safeParse(msg);
       if (parsed.success) this.handlePrank(client.sessionId, parsed.data.kind);
+    });
+
+    // Host-only: pick the stage for the next match (lobby only).
+    this.onMessage(ClientMsg.SetStage, (client, msg) => {
+      if (client.sessionId !== this.state.hostSessionId) return;
+      if (this.state.phase !== "lobby") return;
+      const parsed = stageSchema.safeParse(msg);
+      if (!parsed.success || !STAGES[parsed.data.stageId]) return;
+      this.selectedStageId = parsed.data.stageId;
+      const s = STAGES[this.selectedStageId];
+      this.state.stageId = s.id;
+      this.state.stageTheme = s.theme;
     });
 
     console.log(`[room ${this.roomId}] created (code=${state.code || "—"})`);
@@ -349,10 +367,30 @@ export class GameRoom extends Room<GameState> {
     if (aliveCount <= 1) {
       this.state.winnerId = aliveCount === 1 ? last : "";
       this.state.awardsJson = JSON.stringify(this.computeAwards());
+      this.recordMatchResults();
       this.state.phase = "ended";
       const w = this.state.players.get(last);
       console.log(`[room ${this.roomId}] 🏆 match ended — winner: ${w?.name ?? "—"}`);
     }
+  }
+
+  /** Persist this match to the monthly leaderboard (best-effort, one row/player). */
+  private recordMatchResults() {
+    const ts = Date.now();
+    const rows: MatchRow[] = [];
+    this.state.players.forEach((p, id) => {
+      const cs = this.combat.get(id);
+      const survived = cs && cs.diedAtMs >= 0 ? cs.diedAtMs : this.state.elapsedMs;
+      rows.push({
+        name: p.name,
+        kills: p.kills,
+        dmg: Math.round(cs?.damageDealt ?? 0),
+        survivedMs: Math.round(survived),
+        won: id === this.state.winnerId,
+        ts,
+      });
+    });
+    recordMatch(rows);
   }
 
   /** Funny end-of-match awards from tracked stats. Skips any with no qualifier. */
@@ -445,7 +483,7 @@ export class GameRoom extends Room<GameState> {
   // ── Match lifecycle ─────────────────────────────────────────────────────────
 
   private beginMatch() {
-    this.stage = STAGES[DEFAULT_STAGE_ID] ?? COLOSSEUM;
+    this.stage = STAGES[this.selectedStageId] ?? STAGES[DEFAULT_STAGE_ID] ?? COLOSSEUM;
     this.state.stageId = this.stage.id;
     this.state.stageTheme = this.stage.theme;
     this.state.arenaRadius = this.stage.radius;

@@ -19,6 +19,22 @@ const EYE_HEIGHT = 2.05;
 /** Swing animation length (ms). Purely visual; the server owns the real cooldown. */
 const SWING_MS = 300;
 
+/** Per-stage visual palette (theme drives visuals only — never gameplay). */
+interface StageTheme {
+  sky: string;
+  danger: string;
+  dangerEmissive: string;
+  safe: string;
+  ring: string;
+  boundary: string;
+}
+const STAGE_THEMES: Record<string, StageTheme> = {
+  colosseum: { sky: "#bfe4ff", danger: "#ff7a5c", dangerEmissive: "#e14b3d", safe: "#eaf6ff", ring: "#38a3ff", boundary: "#2c81d6" },
+  pit: { sky: "#f3d0a2", danger: "#d8462f", dangerEmissive: "#a52d1a", safe: "#ffe6cf", ring: "#ff8a3a", boundary: "#b5431f" },
+  sky: { sky: "#cfe4ff", danger: "#8fb0ff", dangerEmissive: "#5b6ee0", safe: "#eef6ff", ring: "#6d8bff", boundary: "#6d4bd6" },
+};
+const stageTheme = (t: string): StageTheme => STAGE_THEMES[t] ?? STAGE_THEMES.colosseum;
+
 /** Look of each pickup kind (weapons + event items). */
 const PICKUP_STYLE: Record<string, { color: string; glow: number }> = {
   fast: { color: "#38a3ff", glow: 0.25 },
@@ -161,6 +177,7 @@ function PlayerAvatar({
  *  disc (scaled to zoneRadius each frame) shrinks over it. */
 function Arena() {
   const arenaR = useGame((s) => s.arenaRadius);
+  const T = stageTheme(useGame((s) => s.stageTheme));
   const safe = useRef<Mesh>(null);
   const zoneRing = useRef<Mesh>(null);
 
@@ -172,25 +189,25 @@ function Arena() {
 
   return (
     <>
-      {/* danger floor (lava) — full arena, sits under the safe disc */}
+      {/* danger floor — full arena, sits under the safe disc */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <circleGeometry args={[arenaR, 64]} />
-        <meshStandardMaterial color="#ff7a5c" emissive="#e14b3d" emissiveIntensity={0.28} />
+        <meshStandardMaterial color={T.danger} emissive={T.dangerEmissive} emissiveIntensity={0.28} />
       </mesh>
       {/* safe floor — unit circle scaled to zoneRadius */}
       <mesh ref={safe} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.006, 0]} receiveShadow>
         <circleGeometry args={[1, 64]} />
-        <meshStandardMaterial color="#eaf6ff" />
+        <meshStandardMaterial color={T.safe} />
       </mesh>
       {/* glowing safe-zone edge */}
       <mesh ref={zoneRing} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]}>
         <ringGeometry args={[0.965, 1, 64]} />
-        <meshBasicMaterial color="#38a3ff" />
+        <meshBasicMaterial color={T.ring} />
       </mesh>
       {/* physical arena boundary */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
         <ringGeometry args={[arenaR - 0.3, arenaR, 64]} />
-        <meshBasicMaterial color="#2c81d6" />
+        <meshBasicMaterial color={T.boundary} />
       </mesh>
     </>
   );
@@ -273,6 +290,7 @@ function World({
   const meStunned = useGame((s) => (s.sessionId ? (s.players[s.sessionId]?.stunned ?? false) : false));
   const phase = useGame((s) => s.phase);
   const arenaR = useGame((s) => s.arenaRadius);
+  const sky = stageTheme(useGame((s) => s.stageTheme)).sky;
   const maxR = arenaR - PLAYER_RADIUS;
 
   const fpActive = !isHost && !!sessionId && meAlive;
@@ -329,7 +347,7 @@ function World({
 
   return (
     <>
-      <color attach="background" args={["#bfe4ff"]} />
+      <color attach="background" args={[sky]} />
       <ambientLight intensity={0.8} />
       <directionalLight position={[10, 18, 8]} intensity={1.2} castShadow shadow-mapSize={[2048, 2048]} />
 

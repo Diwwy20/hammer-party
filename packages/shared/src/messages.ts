@@ -19,8 +19,15 @@ export const ClientMsg = {
   Event: "event",
   /** Dead-player only: throw a prank (banana/bomb) at a random survivor. */
   Prank: "prank",
+  /** Host-only: pick the stage for the next match (lobby only). */
+  SetStage: "setstage",
 } as const;
 export type ClientMsg = (typeof ClientMsg)[keyof typeof ClientMsg];
+
+/** Host → server: choose the stage for the next match. */
+export interface StageMessage {
+  stageId: string;
+}
 
 /** Dead player → server: lob a prank at a random survivor. */
 export interface PrankMessage {
