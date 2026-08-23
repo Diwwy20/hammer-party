@@ -2,8 +2,9 @@ import { BACKS, FACES, HATS, PLAYER_COLORS } from "@hammer/shared";
 import type { Cosmetic } from "../store";
 
 /* ── Procedural low-poly cosmetic meshes (swap for glTF later) ────────────────
-   Shared by the lobby CharacterPreview AND the in-game avatars so a hat/face/back
-   looks identical everywhere. Head center ≈ [0, 1.98, 0], size 0.6³.            */
+   The shared avatar used everywhere the game draws a character — the plaza lobby
+   and the in-game arena — so a hat/face/back looks identical in both. Head center
+   ≈ [0, 1.98, 0], size 0.6³.                                                     */
 
 export function Hat({ id }: { id: string }) {
   switch (id) {

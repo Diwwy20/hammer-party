@@ -13,6 +13,7 @@ import {
   HEAL_ORB_HP,
   HP_MAX,
   KNOCKBACK_DECAY,
+  LOBBY_RADIUS,
   MAX_PLAYERS,
   MIN_PLAYERS_TO_START,
   MOVE_SPEED,
@@ -37,7 +38,6 @@ import {
   type SwingEvent,
 } from "@hammer/shared";
 import { cleanName, cosmeticSchema, eventSchema, inputSchema, prankSchema, readySchema, stageSchema } from "../validate";
-import { recordMatch, type MatchRow } from "../leaderboard";
 
 /** Per-player simulation state kept OUT of the synced schema (server-only). */
 interface CombatState {
@@ -58,6 +58,15 @@ interface Award {
   label: string;
   name: string;
   detail: string;
+}
+
+/** One row of the end-of-match standings (ranked winner-first). */
+interface Standing {
+  place: number;
+  name: string;
+  colorIndex: number;
+  kills: number;
+  dmg: number;
 }
 
 const freshCombat = (): CombatState => ({
@@ -104,8 +113,11 @@ export class GameRoom extends Room<GameState> {
   onCreate(options?: JoinOptions) {
     const state = new GameState();
     state.code = (options?.code ?? "").toUpperCase();
-    // show the default stage in the lobby before the Host picks/starts
-    state.stageId = this.stage.id;
+    // the lobby is a walkable plaza — size the world to LOBBY_RADIUS until a match starts
+    state.arenaRadius = LOBBY_RADIUS;
+    state.zoneRadius = LOBBY_RADIUS;
+    // stageId reflects the Host's picker choice; the lobby's own look is fixed client-side
+    state.stageId = this.selectedStageId;
     state.stageTheme = this.stage.theme;
     this.setState(state);
 
@@ -210,6 +222,7 @@ export class GameRoom extends Room<GameState> {
     player.name = cleanName(options?.name);
     this.state.players.set(client.sessionId, player);
     this.combat.set(client.sessionId, freshCombat());
+    this.spawnLobbyPlayer(client.sessionId); // drop them into the plaza (not at 0,0)
     console.log(`[room ${this.roomId}] + ${player.name} (${client.sessionId}) — ${this.state.players.size}/${MAX_PLAYERS}`);
   }
 
@@ -248,7 +261,9 @@ export class GameRoom extends Room<GameState> {
   // ── Combat ────────────────────────────────────────────────────────────────
 
   private handleAttack(id: string) {
-    if (this.state.phase !== "playing") return;
+    // Attacks fire in the lobby too (playful bonks) and during a match.
+    const playing = this.state.phase === "playing";
+    if (!playing && this.state.phase !== "lobby") return;
     const attacker = this.state.players.get(id);
     const cs = this.combat.get(id);
     if (!attacker || !attacker.alive || !cs) return;
@@ -273,20 +288,23 @@ export class GameRoom extends Room<GameState> {
       if (dist > hammer.reach || dist < 1e-4) return;
       if ((ddx * fx + ddz * fz) / dist < arcCos) return; // outside the swing cone
 
-      const before = target.hp;
-      target.hp = Math.max(0, target.hp - hammer.dmg);
-      cs.damageDealt += before - target.hp;
+      // Knockback + stun always land (the satisfying bonk); damage only in a match.
       const tcs = this.combat.get(tid);
       if (tcs) {
         tcs.vx += (ddx / dist) * hammer.knockback;
         tcs.vz += (ddz / dist) * hammer.knockback;
         if (hammer.stunMs > 0) tcs.stunUntil = now + hammer.stunMs;
       }
+
+      if (!playing) return; // lobby: no HP loss, no kills, no awards tracking
+      const before = target.hp;
+      target.hp = Math.max(0, target.hp - hammer.dmg);
+      cs.damageDealt += before - target.hp;
       this.broadcast(ServerMsg.Hit, { id: tid, by: id, dmg: hammer.dmg, hp: target.hp } as HitEvent);
       if (target.hp <= 0) this.killPlayer(tid, id);
     });
 
-    this.checkWin();
+    if (playing) this.checkWin();
   }
 
   /** Flip a player to spectator. `by` = attacker id for a kill credit, "" for zone/wall. */
@@ -367,30 +385,31 @@ export class GameRoom extends Room<GameState> {
     if (aliveCount <= 1) {
       this.state.winnerId = aliveCount === 1 ? last : "";
       this.state.awardsJson = JSON.stringify(this.computeAwards());
-      this.recordMatchResults();
+      this.state.standingsJson = JSON.stringify(this.computeStandings());
       this.state.phase = "ended";
       const w = this.state.players.get(last);
       console.log(`[room ${this.roomId}] 🏆 match ended — winner: ${w?.name ?? "—"}`);
     }
   }
 
-  /** Persist this match to the monthly leaderboard (best-effort, one row/player). */
-  private recordMatchResults() {
-    const ts = Date.now();
-    const rows: MatchRow[] = [];
-    this.state.players.forEach((p, id) => {
+  /**
+   * Final placement for the Results screen: the winner first, then everyone else by
+   * time-of-death (last to die ranks higher). This is per-match only — nothing is
+   * persisted (the Host just leaves the screen up for the room to see).
+   */
+  private computeStandings(): Standing[] {
+    const rows = [...this.state.players.entries()].map(([id, p]) => {
       const cs = this.combat.get(id);
-      const survived = cs && cs.diedAtMs >= 0 ? cs.diedAtMs : this.state.elapsedMs;
-      rows.push({
-        name: p.name,
-        kills: p.kills,
-        dmg: Math.round(cs?.damageDealt ?? 0),
-        survivedMs: Math.round(survived),
-        won: id === this.state.winnerId,
-        ts,
-      });
+      // alive (the winner) sorts to the very top; the rest by when they died
+      const diedAt = cs && cs.diedAtMs >= 0 ? cs.diedAtMs : Number.POSITIVE_INFINITY;
+      return { id, name: p.name, colorIndex: p.colorIndex, kills: p.kills, dmg: Math.round(cs?.damageDealt ?? 0), diedAt };
     });
-    recordMatch(rows);
+    rows.sort((a, b) => {
+      if (a.id === this.state.winnerId) return -1;
+      if (b.id === this.state.winnerId) return 1;
+      return b.diedAt - a.diedAt; // later death = better place
+    });
+    return rows.map((r, i) => ({ place: i + 1, name: r.name, colorIndex: r.colorIndex, kills: r.kills, dmg: r.dmg }));
   }
 
   /** Funny end-of-match awards from tracked stats. Skips any with no qualifier. */
@@ -490,6 +509,7 @@ export class GameRoom extends Room<GameState> {
     this.state.zoneRadius = this.stage.radius;
     this.state.eventBanner = "";
     this.state.awardsJson = "";
+    this.state.standingsJson = "";
     this.eventBannerUntil = 0;
     this.goldenFired = false;
     this.healFired = false;
@@ -542,9 +562,11 @@ export class GameRoom extends Room<GameState> {
     this.state.phase = "lobby";
     this.state.elapsedMs = -1;
     this.state.winnerId = "";
-    this.state.zoneRadius = this.state.arenaRadius;
+    this.state.arenaRadius = LOBBY_RADIUS;
+    this.state.zoneRadius = LOBBY_RADIUS;
     this.state.eventBanner = "";
     this.state.awardsJson = "";
+    this.state.standingsJson = "";
     this.aliveAtStart = 0;
     this.firstBloodName = "";
     this.inputs.clear();
@@ -559,12 +581,82 @@ export class GameRoom extends Room<GameState> {
       p.hammer = DEFAULT_HAMMER;
       p.kills = 0;
     });
+    this.state.players.forEach((_p, id) => this.spawnLobbyPlayer(id)); // re-scatter across the plaza
     console.log(`[room ${this.roomId}] ↺ reset to lobby`);
   }
 
-  /** Authoritative step: movement + knockback + wall-slam + zone + pickups + events. */
+  /** Place a player at a random spot on the plaza ring (waiting-room spawn). */
+  private spawnLobbyPlayer(id: string) {
+    const p = this.state.players.get(id);
+    if (!p) return;
+    const a = Math.random() * Math.PI * 2;
+    const r = LOBBY_RADIUS * 0.5;
+    p.x = Math.cos(a) * r;
+    p.z = Math.sin(a) * r;
+    p.dir = Math.atan2(-p.x, -p.z); // face the centre
+    this.inputs.set(id, { dx: 0, dz: 0 });
+  }
+
+  /** Authoritative step — dispatches on phase (plaza vs. match). */
   private update(deltaMs: number) {
-    if (this.state.phase !== "playing") return;
+    if (this.state.phase === "lobby") this.updateLobby(deltaMs);
+    else if (this.state.phase === "playing") this.updatePlaying(deltaMs);
+  }
+
+  /**
+   * Plaza step: just walk + let knockback decay so bonks feel good. No zone, no
+   * pickups, no wall-slam, no HP — the lobby is horseplay only.
+   */
+  private updateLobby(deltaMs: number) {
+    const dt = deltaMs / 1000;
+    const maxR = LOBBY_RADIUS - PLAYER_RADIUS;
+    const now = Date.now();
+    const decay = Math.exp(-KNOCKBACK_DECAY * dt);
+
+    this.state.players.forEach((p, id) => {
+      const cs = this.combat.get(id);
+      const stunned = !!cs && now < cs.stunUntil;
+      p.stunned = stunned;
+
+      let x = p.x;
+      let z = p.z;
+
+      const input = this.inputs.get(id);
+      if (!stunned && input && (input.dx !== 0 || input.dz !== 0)) {
+        x += input.dx * MOVE_SPEED * dt;
+        z += input.dz * MOVE_SPEED * dt;
+        p.dir = Math.atan2(input.dx, input.dz);
+      }
+
+      if (cs && (cs.vx !== 0 || cs.vz !== 0)) {
+        x += cs.vx * dt;
+        z += cs.vz * dt;
+        cs.vx *= decay;
+        cs.vz *= decay;
+        if (Math.hypot(cs.vx, cs.vz) < 0.05) {
+          cs.vx = 0;
+          cs.vz = 0;
+        }
+      }
+
+      // soft wall — clamp to the plaza edge, no slam damage
+      const r = Math.hypot(x, z);
+      if (r > maxR) {
+        x = (x / r) * maxR;
+        z = (z / r) * maxR;
+        if (cs) {
+          cs.vx = 0;
+          cs.vz = 0;
+        }
+      }
+
+      p.x = x;
+      p.z = z;
+    });
+  }
+
+  /** Match step: movement + knockback + wall-slam + zone + pickups + events. */
+  private updatePlaying(deltaMs: number) {
     const dt = deltaMs / 1000;
     const maxR = this.stage.radius - PLAYER_RADIUS;
     const now = Date.now();

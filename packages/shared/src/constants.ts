@@ -19,6 +19,13 @@ export const MATCH_MAX_MINUTES = 20;
 /** Colosseum arena radius (meters) at match start, before the zone shrinks. */
 export const ARENA_RADIUS = 24;
 
+/**
+ * Waiting-room plaza radius (m). Before the Host starts, everyone gathers here and
+ * can walk + bonk (knockback only, no damage). Kept smaller than the smallest stage
+ * so the lobby feels cozy and people bump into each other.
+ */
+export const LOBBY_RADIUS = 16;
+
 /** Walk speed (m/s), applied by the authoritative server. */
 export const MOVE_SPEED = 5;
 
@@ -151,7 +158,7 @@ export interface CosmeticOption {
   readonly icon: string;
 }
 
-/** Cosmetic catalogs (index 0 is always "none"). Rendered procedurally — see CharacterPreview. */
+/** Cosmetic catalogs (index 0 is always "none"). Rendered procedurally — see three/cosmetics.tsx. */
 export const HATS: readonly CosmeticOption[] = [
   { id: "none", label: "ไม่ใส่", icon: "🚫" },
   { id: "cap", label: "แก๊ป", icon: "🧢" },

@@ -43,8 +43,7 @@ projecting a spectator camera for everyone.
 - **colyseus.js + interpolation** — receive state → delay ~100ms → draw (`client/src/net/session.ts`).
 - **nipplejs** (planned, movement) · **qrcode.react** (Host QR) · **Zod** (thin server input validation, planned).
 - **glTF `.glb`** assets later; cosmetics are currently procedural low-poly meshes.
-- **express** (Phase 05) serves the leaderboard HTTP API on the Colyseus port; **TanStack Query** fetches it on the client — **the ONLY place TanStack is used**. Game state still flows Colyseus → Zustand.
-- **Not used:** Redux/tRPC/react-hook-form (state arrives via socket).
+- **Not used:** Redux/tRPC/react-hook-form/TanStack Query — all state (game + UI) arrives via the Colyseus socket → Zustand. The server runs a bare `http` server for the WS transport (no express); there's no HTTP data API (the monthly leaderboard was removed — results are per-match only, in `GameState.standingsJson`).
 
 ## Monorepo layout (pnpm workspaces, scope `@hammer/*`)
 `shared/` is the heart — client and server share one set of types & values.
@@ -53,9 +52,10 @@ packages/
 ├─ shared/src/   constants.ts (HP/dmg/tick/radius + cosmetic catalogs) · schema.ts · messages.ts
 │                (schema is a subpath "@hammer/shared/schema"; index exports constants + messages only,
 │                 so the CLIENT doesn't bundle @colyseus/schema — it decodes state via reflection)
-├─ server/src/   index.ts (define room + filterBy code) · rooms/GameRoom.ts (join/host/ready/cosmetic/start)
-└─ client/src/   screens/{Join,Lobby,Host,Game} · components/Customizer · three/CharacterPreview
-                 · net/{client,session} · store.ts · App.tsx (phase router) · styles.css
+├─ server/src/   index.ts (bare http + define room + filterBy code) · rooms/GameRoom.ts (join/host/ready/cosmetic/start · lobby+match sim) · validate.ts
+└─ client/src/   screens/{Join,Game}  (Game = the single 3D world for lobby plaza · match · results)
+                 · components/{Customizer,LobbyBar,CustomizeSheet,HostLobbyOverlay} · three/cosmetics
+                 · net/{client,session,movement,combat} · store.ts · App.tsx · styles.css
 ```
 **Rule:** all tunable game values live in `shared/constants.ts`. Never duplicate a number.
 

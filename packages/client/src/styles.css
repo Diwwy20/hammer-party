@@ -418,6 +418,69 @@
   .roster-strip__row .chip {
     @apply flex-none;
   }
+
+  /* ── Waiting-room plaza HUD (overlaid on the 3D world) ──────────────────────*/
+  .lobby-topbar {
+    @apply pointer-events-none fixed inset-x-0 top-0 z-20 flex items-center justify-between gap-[10px] px-4 py-3;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0));
+  }
+  .lobby-topbar .pill {
+    @apply pointer-events-auto;
+  }
+  .lobby-head {
+    @apply pointer-events-none fixed inset-x-0 top-[60px] z-20 flex flex-col items-center gap-2 px-4;
+  }
+  .lobby-status {
+    @apply rounded-full px-4 py-[6px] text-center font-display text-sm font-semibold text-ink;
+    background: rgba(255, 255, 255, 0.82);
+  }
+  .lobby-status .glow {
+    @apply text-blue-d;
+  }
+  .lobby-hint {
+    @apply max-w-[320px] text-center text-[11px] leading-snug font-medium text-ink-soft;
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.8);
+  }
+  .lobby-actions {
+    @apply pointer-events-auto flex flex-wrap justify-center gap-2;
+  }
+  .pill--action {
+    @apply cursor-pointer text-[14px] shadow-soft-sm transition-transform select-none active:scale-95;
+  }
+  .pill--go {
+    @apply border-green bg-green text-white;
+    box-shadow: 0 3px 0 var(--color-green-d);
+  }
+  .pill--ready {
+    @apply border-[#b6e9c9] text-green-d;
+    background: #e5f8ec;
+  }
+
+  /* dress-up bottom sheet */
+  .sheet-backdrop {
+    @apply fixed inset-0 z-40 flex items-end justify-center bg-ink/35 backdrop-blur-sm;
+  }
+  .sheet {
+    @apply w-full max-w-[520px] rounded-t-[22px] border-2 border-b-0 border-line bg-surface px-4 pt-2 shadow-soft;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  }
+  .sheet__grab {
+    @apply mx-auto mb-2 h-1.5 w-12 rounded-full;
+    background: var(--color-line);
+  }
+  .sheet__head {
+    @apply mb-1 flex items-center justify-between;
+  }
+
+  /* host big-screen lobby overlay (pinned; the plaza shows behind it) */
+  .host-overlay {
+    @apply fixed top-4 bottom-4 left-4 z-20 flex w-[min(360px,42vw)] flex-col gap-3 overflow-y-auto rounded-card border-2 border-line p-4 shadow-soft;
+    background: rgba(255, 255, 255, 0.9);
+    backdrop-filter: blur(6px);
+  }
+  .host-overlay__lead {
+    @apply text-center font-display text-sm font-bold text-ink-soft;
+  }
 }
 
 /* ============================================================================

@@ -31,22 +31,24 @@ The whole client is **Tailwind CSS** now. `styles.css` holds only:
 - Say **"Host"** in copy — never "เจ้าภาพ".
 - **Never hard-code a map name** ("โคลอสเซียม" etc.) — the game is a general stage system; use generic copy (e.g. tagline "ทุบให้เหลือคนสุดท้าย!").
 - UI copy is Thai; technical terms stay English.
-- Roster shows the count `👥 ในห้อง X/25` and **omits the player's own chip** (name is already on the character plate).
+- **Players never see other players' names in the lobby** — the plaza HUD (`LobbyBar`) shows only the room count `👥 X/25`. (They meet everyone in-match.)
 
 ## Screen routing (`client/src/App.tsx`)
-Driven by `store` (`conn`, `booted`, `phase`, `isHost`):
+Driven by `store` (`conn`, `booted`):
 - `conn==="idle"` → **JoinScreen** (name only if `?room=`, else + code field; `?host` → Host mode)
 - `conn==="error"` → **ErrorScreen**
 - `conn==="connecting" || !booted` → **SplashScreen** (progress bar eases up; `booted:true` ~650ms after open)
-- `open` + `phase` playing/ended → **GameScreen**
-- `open` + lobby → **HostScreen** (if `isHost`) else **LobbyScreen**
+- `open` + `booted` → **GameScreen** — the single 3D world for **every** phase (host + player). It renders phase-driven overlays itself:
+  - `lobby` player → plaza HUD (`LobbyBar`) + dress-up sheet (`CustomizeSheet`); `lobby` host → `HostLobbyOverlay` (QR/code/stage-picker/Start) over a spectator cam.
+  - `playing` → combat HUD (joystick + attack + host event buttons + dead-player prank buttons).
+  - `ended` → `ResultsOverlay` (standings + awards, closeable).
 
 ## Cosmetics (client + server)
 - Catalogs in `shared/constants.ts`: `PLAYER_COLORS` (hex[]), `HATS`/`FACES`/`BACKS` (`{id,label,icon}[]`, index 0 = none). Slots on `Player`: `colorIndex, hatIndex, faceIndex, backIndex`.
 - **Picker:** `client/src/components/Customizer.tsx` — tabs (สีตัว/หมวก/แว่นตา/หลัง) → `sendCosmetic({ [slot]: index })`.
 - **Server** clamps each index (`GameRoom` `SetCosmetic` handler). Client renders live via `store` echo.
-- **3D render:** `client/src/three/CharacterPreview.tsx` — procedural low-poly meshes switched by `id` (Hat/Face/Back components). Transparent canvas over a light stage; light podium + soft rim; `OrbitControls` autoRotate + drag (no zoom/pan).
-- **To add a cosmetic option:** append to the catalog array in `constants.ts` **and** add a `case "<id>"` mesh in the matching component in `CharacterPreview.tsx`. Server clamp updates automatically (uses `.length`).
+- **3D render:** `client/src/three/cosmetics.tsx` — `AvatarBody` + procedural low-poly meshes switched by `id` (Hat/Face/Back components). The **same** `AvatarBody` draws both the plaza-lobby avatars and the arena avatars (edits from `CustomizeSheet` apply live in-world). (`CharacterPreview` — the old spinning-podium lobby preview — was removed with the 2D lobby.)
+- **To add a cosmetic option:** append to the catalog array in `constants.ts` **and** add a `case "<id>"` mesh in the matching component in `three/cosmetics.tsx`. Server clamp updates automatically (uses `.length`).
 
 ## Character
 Blocky low-poly avatar (legs/body/head + shoulder hammer) tinted by `colorIndex`, with

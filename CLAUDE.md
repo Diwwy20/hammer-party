@@ -19,10 +19,10 @@ Distilled project knowledge lives in `.claude/skills/`. Load only what a task ne
 ## ✅ Current status (2026-08)
 - **Phase 00** (foundation) — done.
 - **Phase 01** (Join · Lobby · Movement) — **done**.
-  - join-by-code (QR → name only), Host role + Start, entry Splash, Lobby with a 3D character,
-    ready-toggle, roster, **cosmetics (color/hat/face/back)**, cartoon-minimal theme.
+  - join-by-code (QR → name only), Host role + Start, entry Splash, **cosmetics (color/hat/face/back)**, cartoon-minimal theme.
   - **Movement**: nipplejs joystick → authoritative 20Hz server movement → client interpolation
     (others) + prediction (self), name tags. Netcode in `client/src/net/movement.ts`.
+  - **Lobby is now a walkable 3D plaza** (see the Post-05 refactor below) — the old 2D lobby card is gone.
 - **Phase 02** (Combat) — **done**.
   - **First-person** player camera (host + dead players keep the free spectator orbit-cam).
   - Attack button + cooldown → **server** hit detection (reach + swing-arc cone), damage/HP,
@@ -45,19 +45,30 @@ Distilled project knowledge lives in `.claude/skills/`. Load only what a task ne
   - **SFX**: synthesized WebAudio (no assets, offline) — `client/src/audio.ts`. Verified with headless smokes + in-browser run.
   - ⚠️ Still owed (event hardening): a **real ~25-device load test** (fps/latency) and a full dress rehearsal + LAN fallback;
     reconnection is wired but untested on real flaky wifi.
-- **Phase 05** (Post-event: stages + leaderboard) — **done**.
+- **Phase 05** (Post-event: multiple stages) — **done**.
   - **3 stages** in `packages/shared/src/stages.ts` (`colosseum`/`pit`/`grand`, each with its own radius/zone/pickups/wall-slam/theme);
     **Host picks the stage** in the lobby (`ClientMsg.SetStage`, host+lobby only) → server applies it in `beginMatch`; client renders per-theme colors (`STAGE_THEMES` in `GameScreen`).
-  - **Monthly leaderboard**: server persists each finished match to `packages/server/data/leaderboard.json` (`server/src/leaderboard.ts`, aggregate-by-name) and serves it over **HTTP** (`GET /api/leaderboard` on the same port via **express**, added in `server/src/index.ts`). Host lobby shows it via **TanStack Query** (`client/src/components/Leaderboard.tsx`) — the one place TanStack is allowed.
-  - Verified: headless smoke (stage applies + match recorded) + in-browser (picker + leaderboard render, click-to-pick syncs).
-- **All 6 phases (00–05) done.** Remaining work is event-day hardening (25-device load test, dress rehearsal, LAN fallback).
+- **Post-05 refactor** (Walkable 3D lobby + per-match results; **monthly leaderboard removed**) — **done**.
+  - **Lobby = a live 3D plaza.** One unified world screen (`GameScreen`) drives every phase. In `lobby`: players spawn into a
+    friendly plaza (`LOBBY_RADIUS`), walk (joystick, third-person cam) and **bonk each other — knockback + swing FX but ZERO HP loss**;
+    a **"แต่งตัว"** bottom-sheet (`CustomizeSheet`) opens dress-up; a Ready toggle. **Players never see other players' names in the lobby** —
+    just the room count (`X/25`). Host gets a spectator cam over the plaza + a QR/code/stage-picker/Start overlay (`HostLobbyOverlay`).
+    Server: `updateLobby()` (movement + knockback, no zone/pickups/damage), `handleAttack` gated so damage/kills only fire in `playing`,
+    `spawnLobbyPlayer()` on join/reset.
+  - **Per-match Results only** (no persistence): server computes `GameState.standingsJson` (winner-first ranking) + keeps `awardsJson`;
+    the redesigned `ResultsOverlay` shows standings + funny awards, closeable (dismiss is local — Host just leaves it up on the big screen).
+  - **Deleted**: the monthly leaderboard end-to-end — `server/src/leaderboard.ts`, the `express` `/api/leaderboard` API,
+    `client/src/components/Leaderboard.tsx`, `client/src/net/leaderboard.ts`, and **TanStack Query**. Also removed the old
+    `LobbyScreen`/`HostScreen`/`CharacterPreview` (folded into the 3D world).
+  - Verified in-browser: plaza HUD (no names, count) · customize sheet · Host QR/stage-picker/Start · plaza→combat→Results→restart loop.
+- **All phases done** (00–05 + the 3D-lobby refactor). Remaining work is event-day hardening (25-device load test, dress rehearsal, LAN fallback).
 - Styling is **Tailwind v4 + shadcn (Base UI)** — see `ui-conventions`.
 
 ## 🔑 Non-negotiable rules
 - **`packages/shared/src/constants.ts` is the single source of truth** for every game value (HP, damage, tick, radius, cosmetic catalogs). Never hardcode a number elsewhere.
 - **Server is authoritative** (20Hz). Clients send input only and never decide outcomes. Never trust the client.
 - **No full networked physics/ragdoll.** Capsule movement + swing-angle hit checks + impulse knockback; death ragdoll is **client-only**, never synced.
-- **Stack is locked:** TS · Vite+React 18 (not Next) · Three.js/@react-three/fiber/drei · Zustand · Colyseus/@colyseus/schema · nipplejs · qrcode.react · Zod (thin, server-side) · express (leaderboard HTTP API) · **TanStack Query — ONLY for the Phase 05 leaderboard** (nothing else; game state still arrives via the Colyseus socket → Zustand). No Redux/tRPC.
+- **Stack is locked:** TS · Vite+React 18 (not Next) · Three.js/@react-three/fiber/drei · Zustand · Colyseus/@colyseus/schema · nipplejs · qrcode.react · Zod (thin, server-side). Game + UI state all arrive via the Colyseus socket → Zustand. **No data-fetching lib** (TanStack Query was removed with the leaderboard) · no express (server runs a bare `http` server for the WS transport) · No Redux/tRPC.
 
 ## 🎨 Design & wording conventions (agreed with the owner)
 - **Cartoon-minimal** visual style (bright sky, white rounded cards, chunky candy buttons, rounded Baloo Thai 2 font). NOT dark/fantasy. See `ui-conventions`.
@@ -67,13 +78,14 @@ Distilled project knowledge lives in `.claude/skills/`. Load only what a task ne
 
 ## Structure
 ```
-packages/shared    # constants.ts (SOURCE OF TRUTH) · schema.ts · messages.ts   [@hammer/shared]
-packages/server    # index.ts (define room + filterBy code) · rooms/GameRoom.ts  [@hammer/server]
-packages/client    # screens/{Join,Lobby,Host,Game} · components/Customizer      [@hammer/client]
-                   # · three/CharacterPreview · net/session · store.ts · App.tsx · styles.css
-docs/              # hammer-party-status.pdf · plans/
+packages/shared    # constants.ts (SOURCE OF TRUTH) · schema.ts · messages.ts · stages.ts   [@hammer/shared]
+packages/server    # index.ts (bare http + define room) · rooms/GameRoom.ts · validate.ts   [@hammer/server]
+packages/client    # screens/{Join,Game} · components/{Customizer,LobbyBar,CustomizeSheet,HostLobbyOverlay}  [@hammer/client]
+                   # · three/cosmetics · net/{session,movement,combat} · store.ts · App.tsx · styles.css
+docs/              # hammer-party-status.pdf · hammer-party-phases.pdf · plans/
 .claude/skills     # hammer-party-spec · game-architecture · dev-roadmap · ui-conventions
 ```
+Note: `GameScreen` is the single 3D world for **all** phases (lobby plaza · match · results); there is no separate Lobby/Host screen.
 
 ## Run it
 ```bash

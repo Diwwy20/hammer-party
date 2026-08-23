@@ -124,6 +124,7 @@ function applyState(state: any): void {
     stageTheme: state.stageTheme ?? "",
     eventBanner: state.eventBanner ?? "",
     awardsJson: state.awardsJson ?? "",
+    standingsJson: state.standingsJson ?? "",
   });
 }
 

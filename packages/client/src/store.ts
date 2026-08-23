@@ -38,7 +38,7 @@ export interface PickupView {
   active: boolean;
 }
 
-/** Just the cosmetic slots — what CharacterPreview needs to draw an avatar. */
+/** Just the cosmetic slots — what AvatarBody (three/cosmetics.tsx) needs to draw an avatar. */
 export interface Cosmetic {
   colorIndex: number;
   hatIndex: number;
@@ -70,6 +70,7 @@ interface GameStore {
   stageTheme: string;
   eventBanner: string;
   awardsJson: string;
+  standingsJson: string;
 
   set: (patch: Partial<GameStore>) => void;
   reset: () => void;
@@ -94,6 +95,7 @@ const initial = {
   stageTheme: "",
   eventBanner: "",
   awardsJson: "",
+  standingsJson: "",
 };
 
 export const useGame = create<GameStore>((set) => ({

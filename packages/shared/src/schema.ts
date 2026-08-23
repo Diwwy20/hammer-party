@@ -136,6 +136,9 @@ export class GameState extends Schema {
   /** end-of-match awards as JSON (computed once when phase→"ended"); "" otherwise. */
   declare awardsJson: string;
 
+  /** end-of-match final standings as JSON (ranked winner-first); "" otherwise. */
+  declare standingsJson: string;
+
   /** Human-readable room code shown on the Host screen / used to join. */
   declare code: string;
   /** sessionId of the invisible Host (director on the big screen); "" if none. */
@@ -155,6 +158,7 @@ export class GameState extends Schema {
     this.stageTheme = "";
     this.eventBanner = "";
     this.awardsJson = "";
+    this.standingsJson = "";
     this.code = "";
     this.hostSessionId = "";
     this.winnerId = "";
@@ -172,6 +176,7 @@ defineTypes(GameState, {
   stageTheme: "string",
   eventBanner: "string",
   awardsJson: "string",
+  standingsJson: "string",
   code: "string",
   hostSessionId: "string",
   winnerId: "string",

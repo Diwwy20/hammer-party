@@ -3,13 +3,16 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Grid, Html, OrbitControls } from "@react-three/drei";
 import type { Group, Mesh } from "three";
 import nipplejs from "nipplejs";
-import { HAMMERS, HP_MAX, INPUT_SEND_HZ, MOVE_SPEED, PLAYER_RADIUS, type HammerKind } from "@hammer/shared";
+import { HAMMERS, HP_MAX, INPUT_SEND_HZ, MOVE_SPEED, PLAYER_COLORS, PLAYER_RADIUS, type HammerKind } from "@hammer/shared";
 import { useGame, type PickupView } from "../store";
 import { leaveRoom, sendAttack, sendEvent, sendInput, sendPrank, sendRestart } from "../net/session";
 import { latest, sampleOther } from "../net/movement";
 import { markSwing, prankAt, selfStat, swingAt } from "../net/combat";
 import { AvatarBody } from "../three/cosmetics";
 import { sfx } from "../audio";
+import { LobbyBar } from "../components/LobbyBar";
+import { CustomizeSheet } from "../components/CustomizeSheet";
+import { HostLobbyOverlay } from "../components/HostLobbyOverlay";
 
 type Vec = { dx: number; dz: number };
 type Self = { x: number; z: number; dir: number; ready: boolean };
@@ -32,6 +35,8 @@ const STAGE_THEMES: Record<string, StageTheme> = {
   colosseum: { sky: "#bfe4ff", danger: "#ff7a5c", dangerEmissive: "#e14b3d", safe: "#eaf6ff", ring: "#38a3ff", boundary: "#2c81d6" },
   pit: { sky: "#f3d0a2", danger: "#d8462f", dangerEmissive: "#a52d1a", safe: "#ffe6cf", ring: "#ff8a3a", boundary: "#b5431f" },
   sky: { sky: "#cfe4ff", danger: "#8fb0ff", dangerEmissive: "#5b6ee0", safe: "#eef6ff", ring: "#6d8bff", boundary: "#6d4bd6" },
+  // waiting-room plaza — friendly, no danger colours (used whenever phase==="lobby")
+  lobby: { sky: "#bfe4ff", danger: "#dbeeff", dangerEmissive: "#bfe0ff", safe: "#eef7ff", ring: "#7fc4ff", boundary: "#38a3ff" },
 };
 const stageTheme = (t: string): StageTheme => STAGE_THEMES[t] ?? STAGE_THEMES.colosseum;
 
@@ -48,11 +53,14 @@ function PlayerAvatar({
   id,
   isMe,
   fpSelf,
+  lobby,
   self,
 }: {
   id: string;
   isMe: boolean;
   fpSelf: boolean;
+  /** waiting-room plaza — hide name tags + HP bars (players don't see others' names here) */
+  lobby: boolean;
   self: MutableRefObject<Self>;
 }) {
   const g = useRef<Group>(null);
@@ -97,7 +105,9 @@ function PlayerAvatar({
       const started = swingAt[id] ?? -1;
       const t = started > 0 ? (performance.now() - started) / SWING_MS : 2;
       const strike = t >= 0 && t <= 1 ? Math.sin(t * Math.PI) : 0;
-      hammer.current.rotation.x = -0.5 - strike * 1.95;
+      // swing FORWARD (over the head, down toward the front the avatar faces) — a
+      // positive strike tips the hammer toward +z (front); negative went backward.
+      hammer.current.rotation.x = -0.5 + strike * 2.3;
     }
 
     if (prankRef.current) {
@@ -140,7 +150,7 @@ function PlayerAvatar({
         </group>
       </group>
 
-      {!fpSelf && (
+      {!fpSelf && !lobby && (
         <Html position={[0, 2.7, 0]} center distanceFactor={15} zIndexRange={[10, 0]} className="pointer-events-none">
           <div className="flex flex-col items-center gap-0.5" style={{ opacity: connected ? 1 : 0.45 }}>
             <div className="whitespace-nowrap rounded-full bg-white/85 px-2 py-0.5 text-xs font-bold text-ink shadow">
@@ -174,18 +184,43 @@ function PlayerAvatar({
 }
 
 /** Arena floor + shrinking safe zone. The danger floor is revealed as the safe
- *  disc (scaled to zoneRadius each frame) shrinks over it. */
-function Arena() {
+ *  disc (scaled to zoneRadius each frame) shrinks over it. In the lobby it's a
+ *  plain, friendly plaza — no danger floor, no zone ring. */
+function Arena({ lobby }: { lobby: boolean }) {
   const arenaR = useGame((s) => s.arenaRadius);
-  const T = stageTheme(useGame((s) => s.stageTheme));
+  const themeName = useGame((s) => s.stageTheme);
+  const T = stageTheme(lobby ? "lobby" : themeName);
   const safe = useRef<Mesh>(null);
   const zoneRing = useRef<Mesh>(null);
 
   useFrame(() => {
+    if (lobby) return;
     const zr = useGame.getState().zoneRadius || arenaR;
     if (safe.current) safe.current.scale.set(zr, zr, 1);
     if (zoneRing.current) zoneRing.current.scale.set(zr, zr, 1);
   });
+
+  if (lobby) {
+    return (
+      <>
+        {/* plaza floor — one calm disc, no hazards */}
+        <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+          <circleGeometry args={[arenaR, 64]} />
+          <meshStandardMaterial color={T.safe} />
+        </mesh>
+        {/* soft inner accent ring */}
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
+          <ringGeometry args={[arenaR * 0.62, arenaR * 0.64, 64]} />
+          <meshBasicMaterial color={T.ring} transparent opacity={0.5} />
+        </mesh>
+        {/* plaza boundary */}
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
+          <ringGeometry args={[arenaR - 0.3, arenaR, 64]} />
+          <meshBasicMaterial color={T.boundary} />
+        </mesh>
+      </>
+    );
+  }
 
   return (
     <>
@@ -290,18 +325,22 @@ function World({
   const meStunned = useGame((s) => (s.sessionId ? (s.players[s.sessionId]?.stunned ?? false) : false));
   const phase = useGame((s) => s.phase);
   const arenaR = useGame((s) => s.arenaRadius);
-  const sky = stageTheme(useGame((s) => s.stageTheme)).sky;
+  const themeName = useGame((s) => s.stageTheme);
+  const lobby = phase === "lobby";
+  const sky = stageTheme(lobby ? "lobby" : themeName).sky;
   const maxR = arenaR - PLAYER_RADIUS;
 
-  const fpActive = !isHost && !!sessionId && meAlive;
-  const spectator = isHost || (!!sessionId && !meAlive);
+  // players drive their own avatar in the plaza (lobby) and in a live match
+  const controlling = !isHost && !!sessionId && meAlive && (phase === "playing" || lobby);
+  const firstPerson = controlling && phase === "playing"; // match = eye cam; lobby = 3rd-person
+  const spectator = isHost || (!!sessionId && !meAlive) || phase === "ended";
 
   useEffect(() => {
     if (spectator) camera.position.set(0, 16, 22);
   }, [spectator, camera]);
 
   useFrame((state, dt) => {
-    if (!fpActive || !sessionId) return;
+    if (!controlling || !sessionId) return;
 
     if (!self.current.ready) {
       const s = latest(sessionId);
@@ -311,8 +350,8 @@ function World({
       }
     }
 
-    const { dx, dz } = input.current;
-    if (!meStunned && phase === "playing" && (dx !== 0 || dz !== 0)) {
+    const { dx, dz } = toWorld(input.current.dx, input.current.dz, lobby);
+    if (!meStunned && (dx !== 0 || dz !== 0)) {
       self.current.x += dx * MOVE_SPEED * dt;
       self.current.z += dz * MOVE_SPEED * dt;
       const r = Math.hypot(self.current.x, self.current.z);
@@ -336,13 +375,22 @@ function World({
 
     selfStat.r = Math.hypot(self.current.x, self.current.z);
 
-    camYaw.current = lerpAngle(camYaw.current, self.current.dir, 1 - Math.exp(-dt * 12));
-    const fx = Math.sin(camYaw.current);
-    const fz = Math.cos(camYaw.current);
     const cx = self.current.x;
     const cz = self.current.z;
-    state.camera.position.set(cx, EYE_HEIGHT, cz);
-    state.camera.lookAt(cx + fx * 6, 1.0, cz + fz * 6);
+    if (firstPerson) {
+      // match: eye cam follows your facing (camera looks where you move)
+      camYaw.current = lerpAngle(camYaw.current, self.current.dir, 1 - Math.exp(-dt * 12));
+      const fx = Math.sin(camYaw.current);
+      const fz = Math.cos(camYaw.current);
+      state.camera.position.set(cx, EYE_HEIGHT, cz);
+      state.camera.lookAt(cx + fx * 6, 1.0, cz + fz * 6);
+    } else {
+      // plaza: a FIXED-orientation follow cam, always looking +z. It never chases
+      // your facing, so the stick stays intuitive (up = away from camera, down =
+      // toward it). toWorld() maps the stick into this view (screen-right = world -x).
+      state.camera.position.set(cx, 4.4, cz - 6.5);
+      state.camera.lookAt(cx, 1.5, cz);
+    }
   });
 
   return (
@@ -351,7 +399,7 @@ function World({
       <ambientLight intensity={0.8} />
       <directionalLight position={[10, 18, 8]} intensity={1.2} castShadow shadow-mapSize={[2048, 2048]} />
 
-      <Arena />
+      <Arena lobby={lobby} />
       <Grid
         args={[arenaR * 2, arenaR * 2]}
         cellSize={2}
@@ -365,7 +413,7 @@ function World({
       <Pickups />
 
       {ids.map((id) => (
-        <PlayerAvatar key={id} id={id} isMe={id === sessionId} fpSelf={fpActive && id === sessionId} self={self} />
+        <PlayerAvatar key={id} id={id} isMe={id === sessionId} fpSelf={firstPerson && id === sessionId} lobby={lobby} self={self} />
       ))}
 
       {spectator && <OrbitControls target={[0, 0.5, 0]} maxPolarAngle={Math.PI / 2.1} enableDamping />}
@@ -398,7 +446,9 @@ function Joystick({ input }: { input: MutableRefObject<Vec> }) {
 
     let last: Vec = { dx: 0, dz: 0 };
     const timer = window.setInterval(() => {
-      const { dx, dz } = input.current;
+      // send WORLD-space input (matches prediction); transform depends on the phase's camera
+      const lobby = useGame.getState().phase === "lobby";
+      const { dx, dz } = toWorld(input.current.dx, input.current.dz, lobby);
       if (dx !== last.dx || dz !== last.dz) {
         sendInput(dx, dz);
         last = { dx, dz };
@@ -414,6 +464,92 @@ function Joystick({ input }: { input: MutableRefObject<Vec> }) {
   }, [input]);
 
   return <div ref={zone} className="fixed bottom-6 left-6 h-[140px] w-[140px] touch-none" />;
+}
+
+/**
+ * Desktop keyboard controls: WASD / arrow keys to move, Space to swing. Writes the
+ * SAME raw `input` vector the joystick uses (screen-space), so both share the send +
+ * prediction path — no separate netcode. Only mounted for a controllable player.
+ */
+function KeyboardControls({ input, sessionId }: { input: MutableRefObject<Vec>; sessionId?: string }) {
+  useEffect(() => {
+    // Track by physical key CODE (e.code: "KeyW"/"ArrowUp"/…), not e.key — so it
+    // works regardless of the OS keyboard layout / IME (e.g. Thai input, where the
+    // W key would report a Thai character instead of "w").
+    const codes = new Set<string>();
+    let swingTimer: number | undefined;
+    const MOVE_CODES = ["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
+
+    const recompute = () => {
+      let dx = 0;
+      let dz = 0;
+      if (codes.has("KeyW") || codes.has("ArrowUp")) dz += 1;
+      if (codes.has("KeyS") || codes.has("ArrowDown")) dz -= 1;
+      if (codes.has("KeyD") || codes.has("ArrowRight")) dx += 1;
+      if (codes.has("KeyA") || codes.has("ArrowLeft")) dx -= 1;
+      const m = Math.hypot(dx, dz);
+      if (m > 1) {
+        dx /= m;
+        dz /= m;
+      }
+      input.current = { dx, dz };
+    };
+
+    const swing = () => {
+      if (sessionId) markSwing(sessionId);
+      sendAttack();
+    };
+    const startSwing = () => {
+      if (swingTimer) return;
+      sfx.swing();
+      swing();
+      swingTimer = window.setInterval(swing, 130);
+    };
+    const stopSwing = () => {
+      if (swingTimer) {
+        window.clearInterval(swingTimer);
+        swingTimer = undefined;
+      }
+    };
+
+    const onDown = (e: KeyboardEvent) => {
+      if (e.code === "Space") {
+        e.preventDefault();
+        startSwing();
+        return;
+      }
+      if (!MOVE_CODES.includes(e.code)) return;
+      e.preventDefault();
+      if (!codes.has(e.code)) {
+        codes.add(e.code);
+        recompute();
+      }
+    };
+    const onUp = (e: KeyboardEvent) => {
+      if (e.code === "Space") return stopSwing();
+      if (!MOVE_CODES.includes(e.code)) return;
+      codes.delete(e.code);
+      recompute();
+    };
+    const onBlur = () => {
+      codes.clear();
+      recompute();
+      stopSwing();
+    };
+
+    window.addEventListener("keydown", onDown);
+    window.addEventListener("keyup", onUp);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("keydown", onDown);
+      window.removeEventListener("keyup", onUp);
+      window.removeEventListener("blur", onBlur);
+      stopSwing();
+      input.current = { dx: 0, dz: 0 };
+    };
+  }, [input, sessionId]);
+
+  return null;
 }
 
 /** Big thumb-friendly attack button. Hold to swing repeatedly; server gates cooldown. */
@@ -461,36 +597,80 @@ interface Award {
   detail: string;
 }
 
-/** Champion + funny awards shown when the match ends. */
+interface Standing {
+  place: number;
+  name: string;
+  colorIndex: number;
+  kills: number;
+  dmg: number;
+}
+
+/** Final standings + funny awards shown when the match ends. Closeable (dismiss is
+ *  local only — nothing is persisted; the Host just leaves it up for the room). */
 function ResultsOverlay() {
+  const [dismissed, setDismissed] = useState(false);
   const winnerId = useGame((s) => s.winnerId);
   const sessionId = useGame((s) => s.sessionId);
   const isHost = useGame((s) => s.isHost);
   const winnerName = useGame((s) => (s.winnerId ? (s.players[s.winnerId]?.name ?? "") : ""));
   const awardsJson = useGame((s) => s.awardsJson);
+  const standingsJson = useGame((s) => s.standingsJson);
   const iWon = !!sessionId && winnerId === sessionId;
 
-  let awards: Award[] = [];
-  try {
-    if (awardsJson) awards = JSON.parse(awardsJson);
-  } catch {
-    awards = [];
+  const awards = safeParse<Award[]>(awardsJson, []);
+  const standings = safeParse<Standing[]>(standingsJson, []);
+
+  if (dismissed) {
+    return (
+      <button
+        className="pill fixed bottom-6 left-1/2 z-30 -translate-x-1/2"
+        onClick={() => setDismissed(false)}
+      >
+        📊 ดูสรุปผล
+      </button>
+    );
   }
 
   return (
-    <div className="fixed inset-0 z-20 grid place-items-center overflow-y-auto bg-ink/40 px-5 py-8 backdrop-blur-sm">
-      <div className="panel max-w-[520px] text-center">
+    <div className="fixed inset-0 z-20 grid place-items-center overflow-y-auto bg-ink/45 px-5 py-8 backdrop-blur-sm">
+      <div className="panel max-w-[560px] text-center">
         <div className="mb-1 text-[54px]">🏆</div>
         <h2 className="mb-1 font-display text-2xl font-extrabold text-ink">
           {winnerName ? `${winnerName} ชนะ!` : "จบเกม"}
         </h2>
         <p className="muted mb-4">
           {isHost
-            ? "ผู้เล่นคนสุดท้ายที่รอดคือผู้ชนะ"
+            ? "อันดับการประลองรอบนี้"
             : iWon
               ? "คุณคือคนสุดท้ายที่รอด! 🎉"
-              : "รอบนี้คุณตกรอบ — รอโฮสต์เริ่มรอบใหม่"}
+              : "รอบนี้คุณตกรอบ — ไว้เจอกันรอบหน้า"}
         </p>
+
+        {standings.length > 0 && (
+          <ol className="mb-4 flex flex-col gap-1 text-left">
+            {standings.map((s) => (
+              <li
+                key={s.place}
+                className={
+                  "flex items-center gap-3 rounded-field border-2 px-3 py-2 " +
+                  (s.place === 1 ? "border-yellow bg-[#fff7e0]" : "border-line bg-surface-2")
+                }
+              >
+                <span className="w-7 flex-none text-center font-display text-lg font-extrabold text-blue-d">
+                  {s.place === 1 ? "👑" : s.place}
+                </span>
+                <span
+                  className="chip__dot flex-none"
+                  style={{ background: PLAYER_COLORS[s.colorIndex] ?? PLAYER_COLORS[0] }}
+                />
+                <span className="chip__name flex-1 font-display font-bold text-ink">{s.name}</span>
+                <span className="text-[12px] font-semibold whitespace-nowrap text-ink-soft">
+                  ⚔ {s.kills} · 💥 {s.dmg}
+                </span>
+              </li>
+            ))}
+          </ol>
+        )}
 
         {awards.length > 0 && (
           <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -507,17 +687,29 @@ function ResultsOverlay() {
           </div>
         )}
 
-        {isHost ? (
+        {isHost && (
           <button className="btn btn--jade" onClick={sendRestart}>
             เริ่มรอบใหม่
           </button>
-        ) : null}
+        )}
+        <button className="btn btn--ghost mt-2" onClick={() => setDismissed(true)}>
+          ปิดหน้าต่าง
+        </button>
         <button className="link-btn mt-3" onClick={leaveRoom}>
           ออกจากห้อง
         </button>
       </div>
     </div>
   );
+}
+
+/** Parse JSON, falling back to `fallback` on empty/garbage. */
+function safeParse<T>(raw: string, fallback: T): T {
+  try {
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 export function GameScreen() {
@@ -533,10 +725,12 @@ export function GameScreen() {
   const meHammer = useGame((s) => (s.sessionId ? (s.players[s.sessionId]?.hammer ?? "mid") : "mid"));
 
   const input = useRef<Vec>({ dx: 0, dz: 0 });
+  const [sheetOpen, setSheetOpen] = useState(false);
   const ids = idsKey ? idsKey.split("|") : [];
 
   const playing = phase === "playing";
-  const canControl = !isHost && meAlive && playing;
+  const lobby = phase === "lobby";
+  const canControl = !isHost && meAlive && (playing || lobby); // walk + bonk in the plaza too
   const ratio = Math.max(0, Math.min(1, meHp / HP_MAX));
   const hammerLabel = HAMMERS[meHammer as HammerKind]?.label ?? meHammer;
 
@@ -597,6 +791,14 @@ export function GameScreen() {
 
       {canControl && <Joystick input={input} />}
       {canControl && <AttackButton sessionId={sessionId} />}
+      {canControl && <KeyboardControls input={input} sessionId={sessionId} />}
+
+      {/* Waiting-room plaza: player HUD + dress-up sheet */}
+      {lobby && !isHost && <LobbyBar onCustomize={() => setSheetOpen(true)} />}
+      {lobby && !isHost && <CustomizeSheet open={sheetOpen} onClose={() => setSheetOpen(false)} />}
+
+      {/* Waiting-room plaza: Host big-screen overlay (QR + code + stage + start) */}
+      {lobby && isHost && <HostLobbyOverlay />}
 
       {/* Host: trigger random events */}
       {isHost && playing && (
@@ -622,24 +824,26 @@ export function GameScreen() {
         </div>
       )}
 
-      <div className="hud">
-        <div>
-          <b>⚔ กำลังประลอง</b> · {aliveCount} รอด
-        </div>
-        {!isHost && meAlive && playing && (
-          <div className="mt-1.5 flex items-center gap-2">
-            <span className="text-[11px] font-bold">🔨 {hammerLabel}</span>
-            <div className="h-[9px] w-[120px] overflow-hidden rounded-full bg-line">
-              <div className="h-full rounded-full" style={{ width: `${ratio * 100}%`, background: hpColor(ratio), transition: "width 120ms linear" }} />
-            </div>
-            <span className="text-[11px] font-bold">{Math.ceil(meHp)}</span>
+      {!lobby && (
+        <div className="hud">
+          <div>
+            <b>⚔ กำลังประลอง</b> · {aliveCount} รอด
           </div>
-        )}
-        {!isHost && !meAlive && playing && (
-          <div className="muted mt-1 text-[11px]">☠️ ตกรอบแล้ว — หมุนดูสนาม + ป่วนคนที่ยังรอดได้!</div>
-        )}
-        {isHost && <div className="muted text-[11px]">มุมมองเจ้าภาพ · ลากเพื่อหมุนกล้อง</div>}
-      </div>
+          {!isHost && meAlive && playing && (
+            <div className="mt-1.5 flex items-center gap-2">
+              <span className="text-[11px] font-bold">🔨 {hammerLabel}</span>
+              <div className="h-[9px] w-[120px] overflow-hidden rounded-full bg-line">
+                <div className="h-full rounded-full" style={{ width: `${ratio * 100}%`, background: hpColor(ratio), transition: "width 120ms linear" }} />
+              </div>
+              <span className="text-[11px] font-bold">{Math.ceil(meHp)}</span>
+            </div>
+          )}
+          {!isHost && !meAlive && playing && (
+            <div className="muted mt-1 text-[11px]">☠️ ตกรอบแล้ว — หมุนดูสนาม + ป่วนคนที่ยังรอดได้!</div>
+          )}
+          {isHost && <div className="muted text-[11px]">มุมมองเจ้าภาพ · ลากเพื่อหมุนกล้อง</div>}
+        </div>
+      )}
 
       {/* event banner */}
       {banner && (
@@ -656,13 +860,26 @@ export function GameScreen() {
         </div>
       )}
 
-      <button className="btn btn--ghost fixed right-4 top-3 z-30 w-auto px-4 py-2 text-sm" onClick={leaveRoom}>
-        ออก
-      </button>
+      {/* the plaza overlays carry their own leave buttons */}
+      {!lobby && (
+        <button className="btn btn--ghost fixed right-4 top-3 z-30 w-auto px-4 py-2 text-sm" onClick={leaveRoom}>
+          ออก
+        </button>
+      )}
 
       {phase === "ended" && <ResultsOverlay />}
     </div>
   );
+}
+
+/**
+ * Screen-stick intent → world movement vector (server treats input as world-space).
+ * In the plaza the camera is FIXED looking +z, so screen-right maps to world -x —
+ * flip x, keep z (up = forward). In a match the FP camera follows your facing, so
+ * the raw stick is already world-correct (used as-is).
+ */
+function toWorld(dx: number, dz: number, lobby: boolean): Vec {
+  return lobby ? { dx: -dx, dz } : { dx, dz };
 }
 
 /** Green → amber → red as HP drops. */

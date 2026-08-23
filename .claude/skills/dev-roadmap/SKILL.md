@@ -23,9 +23,9 @@ R3F canvas. Done.
 - Join-by-code: Host `create` room (code via `filterBy`), player `join` by code from the QR — **name only** (code comes from `?room=`; a fallback code field shows if opened without a QR).
 - Host role (asHost, not a player, presses Start), host reassign on leave.
 - Entry **Splash** screen (progress bar + tips → `booted`).
-- Lobby: 3D character (drag-rotate), Ready toggle, roster (shows `👥 ในห้อง X/25`, not your own chip).
+- Lobby (**now a walkable 3D plaza** — see the Post-05 refactor below): joystick-walk + bonk (no HP), Ready toggle, a dress-up sheet, and only the room count `👥 X/25` (no other names).
 - **Cosmetics**: color(8)/hat(6)/face(5)/back(5), rendered on the character, server-authoritative + clamped.
-- Start match → `phase="playing"` → everyone routes to GameScreen.
+- Start match → `phase="playing"` (GameScreen just switches from plaza to combat rules).
 - Cartoon-minimal theme applied.
 
 **Movement — ✅ DONE:**
@@ -53,7 +53,7 @@ Shrinking zone (out-of-zone HP bleed, eases-in to force a finish ~12min, well un
 
 ## Phase 04 — Juice · Cosmetics · Polish ✅
 Cosmetics on in-game avatars, full Results/awards, Zod input validation + name filter, dead-player prank throws, SFX, self-host fonts for offline.
-- **Cosmetics finished**: shared procedural meshes in `client/src/three/cosmetics.tsx` (`Hat/Face/Back/AvatarBody`), used by both the lobby `CharacterPreview` and the arena avatars (first-person eye height retuned to the full-size body).
+- **Cosmetics finished**: shared procedural meshes in `client/src/three/cosmetics.tsx` (`Hat/Face/Back/AvatarBody`), used by both the plaza-lobby avatars and the arena avatars (first-person eye height retuned to the full-size body).
 - **Awards**: server tracks kills (`Player.kills`) + damage/wall-slams/first-blood/survival (server-only), computes 5 awards at end → `GameState.awardsJson`; Results overlay renders champion + award cards.
 - **Zod + name filter**: `packages/server/src/validate.ts` — thin `safeParse` on input/ready/cosmetic/event/prank + `cleanName` (control-strip, clamp, profanity mask). `zod` added to `@hammer/server`.
 - **Pranks**: dead players lob banana (slip)/bomb (small dmg, floored so never lethal) at a random survivor — `ClientMsg.Prank`, `ServerMsg.Prank` FX. Buttons show for dead players.
@@ -64,15 +64,22 @@ Cosmetics on in-game avatars, full Results/awards, Zod input validation + name f
 ✅ Done when a match plays to Results with awards; cosmetics show in-arena; the build runs offline.
 
 ## Phase 05 — Post-event ✅
-New stages via config; DB stats + monthly leaderboard (TanStack Query enters here).
+New stages via config.
 - **3 stages** (`colosseum`/`pit`/`grand`) in `shared/src/stages.ts` — each with its own radius/zone/weaponSpawns/wallSlam/`label`/theme; `STAGE_ORDER` drives picker order.
 - **Host stage picker** in the lobby: `ClientMsg.SetStage` (host + lobby only, Zod-checked) → server sets `selectedStageId`, applied in `beginMatch`; lobby shows it via synced `GameState.stageId`. Client theme colors in `GameScreen`'s `STAGE_THEMES` (visual only).
-- **Leaderboard**: match results appended to `packages/server/data/leaderboard.json` (git-ignored) by `server/src/leaderboard.ts` (flat file, aggregate-by-name — no native DB, works offline); served by **express** at `GET /api/leaderboard` (+ `/api/health`) on the Colyseus port (`server/src/index.ts`). Client fetches with **TanStack Query** (`components/Leaderboard.tsx`, shown on the Host lobby) via `HTTP_URL` in `net/client.ts`. `QueryClientProvider` wraps App in `main.tsx`.
-- Verified: headless smoke (host picks `grand` → radius 30 applies → match plays to end → row written; `/api/leaderboard` aggregates) + in-browser (picker + standings render, click-to-pick round-trips).
-- ⚠️ TanStack is allowed ONLY here (leaderboard) — game state still flows Colyseus → Zustand. Leaderboard aggregates by display name (no accounts).
-✅ Done when the Host can pick a stage and the monthly leaderboard updates after matches.
+- Verified: headless smoke (host picks `grand` → radius 30 applies → match plays to end) + in-browser (picker click-to-pick round-trips).
+✅ Done when the Host can pick a stage that applies to the next match.
 
-## 🎉 All phases (00–05) complete — remaining work is event-day hardening (real 25-device load test, dress rehearsal, LAN fallback, reconnection on flaky wifi).
+## Post-05 refactor — Walkable 3D lobby + per-match results ✅
+Owner-requested (2026-08): the lobby became a live 3D plaza and the **monthly leaderboard was removed** (results are per-match only, shown on a screen the Host leaves up).
+- **One world, all phases**: `App` routes every phase to `GameScreen`; it renders phase overlays (`LobbyBar`/`CustomizeSheet`/`HostLobbyOverlay`/`ResultsOverlay`). No more `LobbyScreen`/`HostScreen`/`CharacterPreview`.
+- **Plaza lobby**: `LOBBY_RADIUS` in constants; server `updateLobby()` (walk + knockback, no zone/pickups/damage), `handleAttack` gated so damage/kills only in `playing` (lobby bonks = knockback + swing FX, **no HP loss**), `spawnLobbyPlayer()` on join/reset. Client: third-person follow cam in lobby, name tags/HP hidden, **only the room count `X/25` — no other names**.
+- **Results**: `GameState.standingsJson` (winner-first ranking) + `awardsJson`; `ResultsOverlay` shows standings + funny awards, closeable (dismiss is local; nothing persisted).
+- **Removed**: `server/src/leaderboard.ts`, express + `/api/leaderboard`, `client/src/{components/Leaderboard.tsx,net/leaderboard.ts}`, TanStack Query (+ `QueryClientProvider`), `HTTP_URL`.
+- Verified in-browser: plaza HUD (no names) · dress-up sheet · Host QR/stage-picker/Start · plaza→combat→Results(standings+awards)→restart loop; no console errors.
+✅ Done when players gather/bonk in a 3D plaza and a match ends on a standings+awards screen (no persistence).
+
+## 🎉 All phases (00–05 + 3D-lobby refactor) complete — remaining work is event-day hardening (real 25-device load test, dress rehearsal, LAN fallback, reconnection on flaky wifi).
 
 ---
 

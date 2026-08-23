@@ -2,8 +2,6 @@ import { useEffect, useState } from "react";
 import { useGame } from "./store";
 import { leaveRoom } from "./net/session";
 import { JoinScreen } from "./screens/JoinScreen";
-import { LobbyScreen } from "./screens/LobbyScreen";
-import { HostScreen } from "./screens/HostScreen";
 import { GameScreen } from "./screens/GameScreen";
 
 const TIPS = [
@@ -78,14 +76,12 @@ function ErrorScreen() {
 export function App() {
   const conn = useGame((s) => s.conn);
   const booted = useGame((s) => s.booted);
-  const phase = useGame((s) => s.phase);
-  const isHost = useGame((s) => s.isHost);
 
   if (conn === "idle") return <JoinScreen />;
   if (conn === "error") return <ErrorScreen />;
   if (conn === "connecting" || !booted) return <SplashScreen />;
 
-  // conn === "open" && booted
-  if (phase === "playing" || phase === "ended") return <GameScreen />;
-  return isHost ? <HostScreen /> : <LobbyScreen />;
+  // conn === "open" && booted — one live 3D world drives every phase
+  // (lobby plaza · match · results), for both players and the Host.
+  return <GameScreen />;
 }

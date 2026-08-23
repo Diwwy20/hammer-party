@@ -12,11 +12,9 @@
     "@colyseus/ws-transport": "^0.15.0",
     "@hammer/shared": "workspace:*",
     "colyseus": "^0.15.0",
-    "express": "^5.2.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@types/express": "^5.0.6",
     "@types/node": "^22.8.0",
     "tsx": "^4.19.1",
     "typescript": "^5.6.3"

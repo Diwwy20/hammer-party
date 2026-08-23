@@ -56,10 +56,10 @@ the lowest-HP player. Host can trigger events; dead players can vote.
 - **Player**: cosmetic-only customization (no stat effect) — for photos & finding yourself.
 - **Host (invisible)**: flies, free spectator cam on the big screen. Sets HP/time/map, kicks, triggers events, presses Start. Not counted as a player.
 - **Dead player**: enters Spectator — watches survivors, throws prank items (banana=slip, small bomb), cheers, votes. Nobody sits idle.
-- **Results**: champion podium + funny awards — Most Kills · First Blood · Longest Survivor · Pacifist · Most Wall-slams → monthly leaderboard.
+- **Results**: final standings (winner-first) + funny awards — Most Kills · First Blood · Longest Survivor · Pacifist · Most Wall-slams. Per-match only, **not persisted** (the Host leaves it up on the big screen; there's no monthly leaderboard).
 
 ## Game flow
-Scan QR / enter code → **Splash (loading)** → Lobby (dress up, ready-up, wait for Host)
+Scan QR / enter code → **Splash (loading)** → **Lobby = a walkable 3D plaza** (walk + bonk with no HP loss, dress up, ready-up, wait for Host)
 → Host starts → fight, floor shrinks → last one standing → Results.
 **Dead players never leave** — they switch to spectate + prank mode.
 
