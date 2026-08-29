@@ -15,7 +15,7 @@
     "typecheck": "pnpm -r --parallel typecheck",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "pnpm -F @hammer/server smoke",
+    "test:e2e": "pnpm -F @hammer/e2e test",
     "lint": "eslint .",
     "format": "prettier --write ."
   },

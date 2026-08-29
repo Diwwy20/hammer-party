@@ -82,6 +82,7 @@ packages/client/src     App.tsx (routing) · store.ts (mirror + selectors) · au
                         · components/hud/{Joystick,AttackButton,KeyboardControls,MatchHud,
                                           EventBanner,HostEventBar,PrankBar,ZoneWarning,ResultsOverlay}
                         · screens/{JoinScreen,GameScreen}
+e2e/                    @hammer/e2e — smoke.ts: the end-to-end smoke (outside packages/ on purpose)
 docs/                   hammer-party-status.pdf · hammer-party-phases.pdf · plans/
 .claude/skills          hammer-party-spec · game-architecture · dev-roadmap · ui-conventions
 ```
@@ -107,10 +108,12 @@ pnpm test        # vitest — the PURE rules (swing cone, zone curve, standings/
 pnpm test:e2e    # full loop against a RUNNING server (`pnpm dev:server` first)
 ```
 
-- Unit tests are colocated: `src/foo.ts` ← `src/foo.test.ts`. Config: `vitest.config.mts` (one run for the
-  whole monorepo).
+- **Unit tests are colocated** (`src/foo.ts` ← `src/foo.test.ts`) so they move and die with their code;
+  config is `vitest.config.mts`, one run for the whole monorepo.
+- **The e2e smoke lives in `e2e/`**, its own workspace package OUTSIDE `packages/` — it isn't part of the
+  product, it drives the product from the outside, and it must stay out of the millisecond unit runner.
 - **Only pure functions get unit tests.** Anything needing a live socket, a Colyseus room or WebGL is covered
-  by `packages/server/scripts/smoke-e2e.ts` instead — mocking it would only test the mocks.
+  by the `e2e/` package instead — mocking it would only test the mocks.
 - New rule → put the decision in a pure function, then test it. That's why `results.ts`, `swingImpact` and
   `zoneRadiusAt` are shaped the way they are.
 

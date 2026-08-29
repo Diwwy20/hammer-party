@@ -1,5 +1,7 @@
 packages:
   - "packages/*"
+  # the end-to-end smoke is its own package: it tests the product, it is not part of it
+  - "e2e"
 
 # Allow these dependencies to run their install/build scripts.
 # esbuild powers vite + tsx; msgpackr-extract is an optional native speedup for Colyseus.

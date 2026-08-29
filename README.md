@@ -11,6 +11,7 @@ packages/
   shared/   # @hammer/shared — enums, constants, math, wire messages, stage data, Colyseus schema
   server/   # @hammer/server — authoritative game server (thin Colyseus room + a game/ simulation layer)
   client/   # @hammer/client — React + Vite + R3F (one live 3D world for lobby, match and results)
+e2e/        # @hammer/e2e — end-to-end smoke; tests the product, is not part of it
 ```
 
 `shared/` is the heart: change a damage number or a phase name once and both sides agree.
@@ -54,12 +55,17 @@ Two layers, on purpose:
 - **`pnpm test`** — vitest over the **pure** rules: the swing cone, the zone curve, standings and
   awards, name sanitising, the Zod edge schemas, and the shared math. No mocks, no sockets, no canvas:
   every one of these is a function from plain inputs to a plain answer.
-- **`pnpm test:e2e`** — one full loop against a **real** server (start it with `pnpm dev:server` first):
+- **`pnpm test:e2e`** (`e2e/smoke.ts`) — one full loop against a **real** server (start it with
+  `pnpm dev:server` first):
   plaza bonks cost no HP → stage picker → match → event → a real death → standings + awards → restart.
   This covers the wiring that unit tests deliberately don't.
 
 Anything that needs a live socket, a Colyseus room or WebGL is covered by the smoke rather than mocked —
 mocking it would only test the mocks.
+
+Unit tests sit **next to the code they cover** (`results.ts` / `results.test.ts`), so they get moved, renamed
+and deleted along with it. The smoke gets **its own directory outside `packages/`** because it maps onto no
+single file, needs a different runner and a live server, and must never be picked up by the unit runner.
 
 ## House rules
 

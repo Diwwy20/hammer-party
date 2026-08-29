@@ -1,6 +1,10 @@
 /**
  * End-to-end smoke against a RUNNING server (`pnpm dev:server`, then `pnpm test:e2e`).
  *
+ * This lives OUTSIDE `packages/` on purpose: it isn't part of the product, it drives
+ * the product from the outside — a real socket, the real matchmaker, a real match.
+ * That also keeps it out of the unit runner, which must stay in milliseconds.
+ *
  * The vitest suite covers the pure rules; this covers the wiring those rules sit in —
  * a real socket, a real room, a real match — which is exactly what mocks can't tell
  * you. It drives a Host plus two players through one full loop and asserts the
@@ -38,6 +42,39 @@ const TICK_MS = 60;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/**
+ * The slice of the decoded room state this smoke reads. colyseus.js types
+ * `room.state` as `unknown` (the client decodes by reflection, without the schema
+ * classes), so we name what we expect instead of reaching through `any`.
+ */
+interface SmokePlayer {
+  name: string;
+  x: number;
+  z: number;
+  hp: number;
+  alive: boolean;
+  hammer: string;
+}
+
+interface SmokeCollection<T> {
+  size: number;
+  get(id: string): T;
+  values(): Iterable<T>;
+}
+
+interface SmokeState {
+  phase: string;
+  code: string;
+  arenaRadius: number;
+  stageId: string;
+  activeEvent: string;
+  winnerId: string;
+  standingsJson: string;
+  awardsJson: string;
+  players: SmokeCollection<SmokePlayer>;
+  pickups: { size: number };
+}
+
 let failures = 0;
 const ok = (message: string) => console.log("✅", message);
 const check = (condition: boolean, good: string, bad: string) => {
@@ -56,7 +93,7 @@ async function main(): Promise<void> {
   silenceFxWarnings(host, ann, bob);
   await sleep(SETTLE_MS);
 
-  const state = () => host.state;
+  const state = () => host.state as SmokeState;
   const playerOf = (id: string) => state().players.get(id);
   const gapBetween = (a: string, b: string) =>
     Math.hypot(playerOf(b).x - playerOf(a).x, playerOf(b).z - playerOf(a).z);
@@ -193,7 +230,7 @@ async function main(): Promise<void> {
   // ── restart ────────────────────────────────────────────────────────────────
   host.send("restart");
   await sleep(SETTLE_MS);
-  const players = [...state().players.values()] as { hp: number; alive: boolean; hammer: string }[];
+  const players = [...state().players.values()];
   check(
     state().phase === GamePhase.Lobby &&
       state().arenaRadius === LOBBY_RADIUS &&

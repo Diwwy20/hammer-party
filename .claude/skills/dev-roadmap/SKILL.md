@@ -129,7 +129,7 @@ Owner-requested (2026-08): a senior-level cleanup, no gameplay redesign. Behavio
 - **Tests (vitest)**: `pnpm test` runs 109 colocated unit tests over the pure rules — shared math,
   `zoneRadiusAt`/`findStage`, enum + catalog consistency, `swingImpact`, `computeStandings`/`computeAwards`,
   `cleanName` + every Zod edge schema, `toWorld`, `parseJson`, the theme lookups. `pnpm test:e2e`
-  (`packages/server/scripts/smoke-e2e.ts`) drives a real Host + 2 players through a full match loop.
+  (the `e2e/` workspace package) drives a real Host + 2 players through a full match loop.
   Two bugs fell out of writing them: `findStage("__proto__")` returned `Object.prototype`, and `cleanName`
   stripped tabs/newlines **before** collapsing whitespace, gluing "Ann<TAB>Lee" into "AnnLee".
 - 📦 `refactor: split server sim + client HUD by responsibility, kill magic values`

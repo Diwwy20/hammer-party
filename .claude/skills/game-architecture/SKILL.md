@@ -148,7 +148,7 @@ packages/
 
 ```bash
 pnpm test        # vitest, one run for the whole monorepo (vitest.config.mts)
-pnpm test:e2e    # packages/server/scripts/smoke-e2e.ts, needs `pnpm dev:server` running
+pnpm test:e2e    # e2e/smoke.ts, needs `pnpm dev:server` running
 ```
 
 Unit tests are **colocated** (`src/foo.ts` ← `src/foo.test.ts`) and cover only functions that map plain
@@ -169,6 +169,14 @@ inputs to a plain answer:
 **Do NOT unit-test through a mock socket, a fake room or a stubbed canvas** — that tests the mock. The
 `MatchSimulation`, the room and the renderer are covered by the e2e smoke, which drives a real Host + two
 players through a real match and asserts the outcomes that would ruin a party.
+
+**Where tests live, and why the two differ:**
+
+- unit → **colocated** next to the code (`results.ts` / `results.test.ts`). They map 1:1 onto a source file,
+  so they move, get renamed and get deleted with it; a parallel `tests/` tree rots into orphans instead.
+- e2e → **`e2e/`, a workspace package of its own, outside `packages/`**. It maps onto no single file, needs a
+  different runner (`tsx`) and a running server, takes seconds rather than milliseconds, and must never be
+  picked up by `vitest` — all four are reasons a separate directory is right here and wrong for unit tests.
 
 When you add a rule, put the decision in a pure function first — that is why `results.ts`, `swingImpact`
 and `zoneRadiusAt` are shaped the way they are.
