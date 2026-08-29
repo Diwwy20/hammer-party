@@ -1,6 +1,6 @@
 ---
 name: game-architecture
-description: Technical architecture, netcode model, tech-stack decisions, and monorepo layout for Hammer Party. Load before writing or reviewing any client/server/shared code, wiring Colyseus rooms, R3F rendering, or netcode — it encodes the authoritative-server model, the 20Hz/100ms interpolation contract, and the hard "do NOT do this" rules (no networked ragdoll, don't trust the client).
+description: Technical architecture, netcode model, module layout, and tech-stack decisions for Hammer Party. Load before writing or reviewing any client/server/shared code, wiring Colyseus rooms, R3F rendering, or netcode — it encodes the authoritative-server model, the 20Hz/100ms interpolation contract, where each responsibility lives, and the hard "do NOT do this" rules (no networked ragdoll, no magic values, don't trust the client).
 ---
 
 # Hammer Party — Architecture & Netcode
@@ -17,49 +17,164 @@ projecting a spectator camera for everyone.
 ```
 
 ## Netcode contract (non-negotiable)
+
 - **Server loop fixed at ~20 Hz** — computes position/damage/HP/zone. Authoritative in one place only.
 - **Clients send input only** (move dir + attack). They never decide outcomes.
 - **Broadcast via `@colyseus/schema`** — only changed fields (binary delta).
-- **Client interpolation**: render *other* players ~100 ms in the past; light prediction on your own avatar.
+- **Client interpolation**: render _other_ players ~100 ms in the past (`net/movement.ts`); the local
+  player is **predicted** and eased back onto the server position (`three/useSelfControl.ts`).
 
 ## ⚠️ Pitfalls — do NOT do these
+
 - ❌ **No full networked physics/ragdoll.** For 25 players it's heavy and crash-prone. Instead:
   character = **capsule** (position/velocity) · attack = **swing-angle check** · knockback = **impulse (decay)** ·
   death ragdoll = **client-only visual, never synced**.
-- ❌ **Never trust the client.** Validate incoming input server-side (Zod, thin). Resolution stays on the server.
-- ❌ **No physics/ragdoll fields in the synced schema.** Only sync what clients must agree on: positions, HP, hammer, phase, zone, cosmetics, code, hostSessionId.
+- ❌ **Never trust the client.** Every inbound message is Zod-checked at the edge (`server/src/net/validate.ts`);
+  resolution stays on the server.
+- ❌ **No physics/ragdoll fields in the synced schema.** Sync only what clients must agree on: positions, HP,
+  hammer, phase, zone, cosmetics, code, hostSessionId. Server-only sim state lives in `SimContext`.
+- ❌ **No magic values.** See "Where a value lives" below — a bare `"playing"` or a stray `400` in game code
+  is a bug waiting to happen.
+- ❌ **No UI copy in the server.** The sim states facts; the client owns wording.
+
+## Where a value lives (the rule that keeps the two sides honest)
+
+| Kind of value                                                                                                         | Home                         |
+| --------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| number the simulation reads (HP, dmg, speeds, radii, timings)                                                         | `shared/src/constants.ts`    |
+| closed set of strings that gets compared (phase, hammer, pickup, event, prank, stage, award, cosmetic id, join error) | `shared/src/enums.ts`        |
+| stage layout (radius, spawns, zone curve, wall-slam)                                                                  | `shared/src/stages.ts`       |
+| pure math both sides must agree on (lerp, lerpAngle, clamp, approach, TAU)                                            | `shared/src/math.ts`         |
+| message names + payload shapes                                                                                        | `shared/src/messages.ts`     |
+| presentation tuning (camera, FX length, HUD poll, sizes)                                                              | `client/src/config/view.ts`  |
+| palettes (stage themes, pickup styles, HP colours)                                                                    | `client/src/config/theme.ts` |
+| Thai copy used by 2+ components                                                                                       | `client/src/config/copy.ts`  |
+| network policy (server URL, reconnect backoff, join-link params)                                                      | `client/src/net/config.ts`   |
+
+Enums are `const` objects **plus a same-named union type**, so a comparison always reads
+`phase === GamePhase.Playing`. Values are what goes on the wire — renaming a key is safe,
+renaming a _value_ is a protocol change.
+
+## Server layout — the room is an adapter, the sim is the game
+
+```
+server/src/
+├─ index.ts              bootstrap: bare http (health) + Colyseus WS transport + define room
+├─ config.ts             env → { port }, health path, HTTP statuses
+├─ logger.ts             the ONE place that writes to the console (scoped: "[room ABCD] …")
+├─ net/validate.ts       Zod schemas per message + cleanName (control-strip, clamp, profanity mask)
+├─ rooms/GameRoom.ts     Colyseus lifecycle ONLY: who connected · is this well-formed & allowed · when to tick
+└─ game/                 the authoritative game, with no networking in it
+   ├─ simulation.ts      MatchSimulation — the façade the room drives (roster, intents, lifecycle, step)
+   ├─ context.ts         SimContext: schema state + server-only state (CombatState, inputs, stage, per-match)
+   ├─ combat.ts          swingImpact (pure cone test) · resolveAttack · killPlayer · resolvePrank
+   ├─ movement.ts        stepLobby / stepMatch — walk + knockback + wall-slam + zone + pickups
+   ├─ pickups.ts         stage weapons, event drops, collect, respawn timers
+   ├─ events.ts          what each event drops + when it auto-fires + banner lifetime
+   ├─ spawn.ts           lobby spawn ring + match spawn ring (and the per-match reset)
+   ├─ cosmetics.ts       clamp every client-chosen index to its catalog
+   └─ results.ts         PURE ranking rules: computeStandings / computeAwards over a stat snapshot
+```
+
+**Rule:** `GameRoom` never touches `state.*` directly and `game/` never touches a `Client`.
+Adding a rule means a `game/` module + one line in `MatchSimulation` — not more `GameRoom`.
+
+`GameState.phase` drives everything: `lobby` (plaza: walk + bonk, no damage) · `playing` (full sim) ·
+`ended` (frozen; results JSON already computed). `MATCH_MAX_MS` is a failsafe — if the shrinking zone
+somehow hasn't finished the match, the healthiest survivor wins rather than the room hanging.
+
+## Client layout — one world, many overlays
+
+```
+client/src/
+├─ App.tsx               routing by connection lifecycle (idle → connecting/splash → open)
+├─ store.ts              the zustand mirror + SELECTORS (every selector returns a primitive)
+├─ config/               view.ts (tuning) · theme.ts (palettes) · copy.ts (Thai copy)
+├─ net/                  config.ts · client.ts · session.ts (the only Colyseus caller) · movement.ts (interp buffer)
+├─ runtime/              per-frame state deliberately OUTSIDE React: combatFx · localPlayer · input
+├─ three/                World · Arena · Pickups · PlayerAvatar · useSelfControl (prediction + camera) · cosmetics
+├─ components/hud/       Joystick · AttackButton · KeyboardControls · MatchHud · EventBanner
+│                        · HostEventBar · PrankBar · ZoneWarning · ResultsOverlay
+└─ screens/              JoinScreen · GameScreen (composition only — picks which overlays are on screen)
+```
+
+**Re-render discipline (this is a 20Hz stream):**
+
+- Positions and combat FX never enter the store — they go to `net/movement.ts` and `runtime/combatFx.ts`
+  and are read per-frame in `useFrame`.
+- Store selectors return primitives (`selectAliveCount`, `usePlayerField(id, p => p?.hp)`), so a patch that
+  changed nothing a component reads does not re-render it.
+- Anything that changes every frame but is needed by DOM (out-of-zone warning) is polled on a timer from
+  `runtime/localPlayer.ts`, not pushed through React.
 
 ## Room / matchmaking (implemented)
+
 - Room name `"game"`, registered with **`.filterBy(['code'])`** so a room code routes players to the right room.
-- **Host**: `client.create("game", { asHost:true, code })` — a fresh room; host is NOT a player, not in `state.players`, not counted, and the only one allowed to `Start`. Host leaving clears `hostSessionId`.
-- **Player**: `client.join("game", { name, code })` — joins the Host's room by code (errors if none). Player cap = `MAX_PLAYERS`; host occupies an extra connection slot.
+- **Host**: `client.create("game", { asHost:true, code })` — a fresh room; host is NOT a player, not in
+  `state.players`, not counted, and the only one allowed to `Start`. Host leaving clears `hostSessionId`.
+  Host-only messages go through `GameRoom.onHostMessage`, which gates them in one place.
+- **Player**: `client.join("game", { name, code })` — joins the Host's room by code. Player cap = `MAX_PLAYERS`;
+  a full room throws `JoinError.RoomFull`, which the client maps to friendly copy (same shared constant).
+- **Reconnect**: server `allowReconnection(RECONNECT_SECONDS)` holds the seat (and clears their input so they
+  don't slide); the client retries per `RECONNECT` in `net/config.ts`.
 
 ## Tech stack & the reasons
+
 - **TypeScript** across client+server+shared → shared state/message types.
 - **React 18 + Vite** (NOT Next): 3D renders on client, no SEO, realtime needs a long-lived Colyseus WS server anyway.
 - **Three.js + @react-three/fiber + drei** — declarative 3D per device.
-- **Zustand** — game/UI state (see `client/src/store.ts`).
+- **Zustand** — game/UI state mirror (`client/src/store.ts`).
 - **Colyseus + @colyseus/schema** — rooms/codes, authoritative sync, binary delta.
-- **colyseus.js + interpolation** — receive state → delay ~100ms → draw (`client/src/net/session.ts`).
-- **nipplejs** (planned, movement) · **qrcode.react** (Host QR) · **Zod** (thin server input validation, planned).
+- **nipplejs** (touch stick) · **qrcode.react** (Host QR) · **Zod** (thin server-edge validation).
 - **glTF `.glb`** assets later; cosmetics are currently procedural low-poly meshes.
-- **Not used:** Redux/tRPC/react-hook-form/TanStack Query — all state (game + UI) arrives via the Colyseus socket → Zustand. The server runs a bare `http` server for the WS transport (no express); there's no HTTP data API (the monthly leaderboard was removed — results are per-match only, in `GameState.standingsJson`).
+- **Not used:** Redux/tRPC/react-hook-form/TanStack Query — all state arrives via the Colyseus socket → Zustand.
+  The server runs a bare `http` server for the WS transport (no express); there is no HTTP data API (the monthly
+  leaderboard was removed — results are per-match only, in `GameState.standingsJson`).
 
 ## Monorepo layout (pnpm workspaces, scope `@hammer/*`)
+
 `shared/` is the heart — client and server share one set of types & values.
+
 ```
 packages/
-├─ shared/src/   constants.ts (HP/dmg/tick/radius + cosmetic catalogs) · schema.ts · messages.ts
-│                (schema is a subpath "@hammer/shared/schema"; index exports constants + messages only,
-│                 so the CLIENT doesn't bundle @colyseus/schema — it decodes state via reflection)
-├─ server/src/   index.ts (bare http + define room + filterBy code) · rooms/GameRoom.ts (join/host/ready/cosmetic/start · lobby+match sim) · validate.ts
-└─ client/src/   screens/{Join,Game}  (Game = the single 3D world for lobby plaza · match · results)
-                 · components/{Customizer,LobbyBar,CustomizeSheet,HostLobbyOverlay} · three/cosmetics
-                 · net/{client,session,movement,combat} · store.ts · App.tsx · styles.css
+├─ shared/src/   enums.ts · constants.ts · math.ts · messages.ts · stages.ts · schema.ts
+│                (schema is the subpath "@hammer/shared/schema"; the index barrel excludes it, so the
+│                 CLIENT never bundles @colyseus/schema — it decodes state via reflection)
+├─ server/src/   see "Server layout" above
+└─ client/src/   see "Client layout" above
 ```
-**Rule:** all tunable game values live in `shared/constants.ts`. Never duplicate a number.
+
+## Testing — pure rules get unit tests, wiring gets the smoke
+
+```bash
+pnpm test        # vitest, one run for the whole monorepo (vitest.config.mts)
+pnpm test:e2e    # packages/server/scripts/smoke-e2e.ts, needs `pnpm dev:server` running
+```
+
+Unit tests are **colocated** (`src/foo.ts` ← `src/foo.test.ts`) and cover only functions that map plain
+inputs to a plain answer:
+
+| Under test                               | Why it's worth a test                                                      |
+| ---------------------------------------- | -------------------------------------------------------------------------- |
+| `shared/math`                            | both sides round-trip the same formula, or prediction drifts               |
+| `shared/stages` `zoneRadiusAt`           | monotonic, accelerates late, hits `minRadius` exactly at `endMs`           |
+| `shared/stages` `findStage`              | an unknown/`__proto__` id must not resolve to a "stage"                    |
+| `shared/enums` + catalogs                | pickup classification, hammer ratios, cosmetic ids match their catalogs    |
+| `server/game/combat` `swingImpact`       | reach, cone edges, behind-you, overlapping bodies, unit direction          |
+| `server/game/results`                    | winner-first ranking, and every award's "skip it if nobody qualifies" rule |
+| `server/net/validate`                    | the trust boundary: NaN, wrong shapes, unknown kinds, name sanitising      |
+| `client/runtime/input` `toWorld`         | the one screen→world mapping both the loop and the sender use              |
+| `client/config/theme`, `client/lib/json` | palette fallbacks, HP thresholds, empty/garbage JSON                       |
+
+**Do NOT unit-test through a mock socket, a fake room or a stubbed canvas** — that tests the mock. The
+`MatchSimulation`, the room and the renderer are covered by the e2e smoke, which drives a real Host + two
+players through a real match and asserts the outcomes that would ruin a party.
+
+When you add a rule, put the decision in a pure function first — that is why `results.ts`, `swingImpact`
+and `zoneRadiusAt` are shaped the way they are.
 
 ## Colyseus schema gotcha (already handled in schema.ts)
+
 Schema fields use `declare` + constructor assignment (not class-field initializers) so
 `defineTypes` change-tracking accessors aren't shadowed. Keep that pattern when adding fields.
 

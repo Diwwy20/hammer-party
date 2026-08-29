@@ -81,10 +81,6 @@
       radial-gradient(circle at 78% 74%, rgba(255, 255, 255, 0.34) 0 60px, transparent 62px),
       radial-gradient(circle at 20% 82%, rgba(255, 255, 255, 0.3) 0 34px, transparent 36px);
   }
-  .screen__scroll {
-    @apply flex flex-1 flex-col items-center gap-4 overflow-y-auto px-[18px] pt-4 pb-[26px];
-    -webkit-overflow-scrolling: touch;
-  }
   .center-col {
     @apply flex w-full flex-1 flex-col items-center justify-center gap-[18px] px-[18px] py-[22px];
   }
@@ -124,28 +120,6 @@
   .muted {
     @apply text-[13px] text-ink-soft;
   }
-  .status-line {
-    @apply text-center font-display text-base font-semibold text-ink-soft;
-  }
-  .status-line .glow {
-    @apply text-blue-d;
-  }
-
-  /* divider */
-  .divider {
-    @apply flex w-full max-w-[300px] items-center gap-2;
-  }
-  .divider::before,
-  .divider::after {
-    content: "";
-    @apply h-[2px] flex-1 rounded-[2px];
-    background: rgba(255, 255, 255, 0.7);
-  }
-  .divider span {
-    @apply text-[8px];
-    color: rgba(255, 255, 255, 0.9);
-  }
-
   /* hero */
   .hero-title {
     @apply m-0 text-center font-display font-extrabold text-white;
@@ -164,26 +138,6 @@
     text-shadow: 0 2px 0 rgba(44, 129, 214, 0.7);
   }
 
-  /* character stage */
-  .stage {
-    @apply relative w-full max-w-[480px] flex-[1_1_auto] overflow-hidden rounded-card border-2 border-line shadow-soft-sm;
-    min-height: 260px;
-    background: linear-gradient(180deg, #cdebff 0%, #eaf7ff 70%, #ffffff 100%);
-  }
-  .stage__canvas {
-    @apply absolute inset-0;
-  }
-  .stage__plate {
-    @apply absolute bottom-[14px] left-1/2 flex -translate-x-1/2 items-center gap-[9px] rounded-full border-2 border-line bg-surface px-[18px] py-[7px] shadow-soft-sm;
-  }
-  .stage__plate .name {
-    @apply font-display text-[19px] font-bold text-ink;
-  }
-  .stage__hint {
-    @apply absolute top-[10px] right-3 rounded-full px-[9px] py-[3px] text-[11px] font-semibold text-ink-faint;
-    background: rgba(255, 255, 255, 0.7);
-  }
-
   /* swatches */
   .swatches {
     @apply flex flex-wrap justify-center gap-3;
@@ -198,10 +152,7 @@
       var(--shadow-soft-sm);
   }
 
-  /* roster chips */
-  .roster {
-    @apply flex flex-wrap gap-2;
-  }
+  /* chips (a coloured dot + a name that truncates) */
   .chip {
     @apply inline-flex max-w-full items-center gap-2 rounded-full border-2 border-line bg-surface-2 py-[5px] pr-[13px] pl-[6px] text-[13px] font-semibold text-ink;
   }
@@ -211,28 +162,6 @@
   .chip__name {
     @apply overflow-hidden text-ellipsis whitespace-nowrap;
   }
-  .chip--me {
-    @apply border-blue;
-    background: #eaf4ff;
-  }
-  .chip--ready {
-    @apply border-[#b6e9c9] text-green-d;
-    background: #e5f8ec;
-  }
-
-  /* host roster grid */
-  .grid-cards {
-    @apply grid w-full gap-3;
-    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-  }
-  .card {
-    @apply flex items-center gap-[10px] rounded-field border-2 border-line bg-surface-2 px-[13px] py-[11px] text-[15px] font-bold text-ink;
-  }
-  .card--ready {
-    @apply border-[#b6e9c9];
-    background: #e5f8ec;
-  }
-
   /* buttons (candy with bottom lip) */
   .btn {
     @apply w-full max-w-[460px] cursor-pointer rounded-btn px-5 py-[15px] font-display text-lg font-bold text-white transition-[transform,box-shadow,filter] duration-75 active:translate-y-1 disabled:cursor-not-allowed;
@@ -316,11 +245,6 @@
   }
 
   /* splash */
-  .spin {
-    @apply h-10 w-10 animate-spin rounded-full border-4;
-    border-color: rgba(255, 255, 255, 0.6);
-    border-top-color: #fff;
-  }
   .splash__mark {
     @apply animate-bob text-[60px];
     filter: drop-shadow(0 8px 12px rgba(30, 70, 120, 0.3));
@@ -356,13 +280,6 @@
   }
   .hud b {
     @apply font-display text-blue-d;
-  }
-
-  /* sticky action bar */
-  .actionbar {
-    @apply flex flex-col items-center gap-[10px] px-[18px] pt-[14px];
-    padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
-    background: linear-gradient(0deg, rgba(234, 246, 255, 0.95), transparent);
   }
 
   /* customizer */
@@ -401,22 +318,6 @@
   }
   .opt--active .opt__label {
     @apply text-blue-d;
-  }
-
-  /* compact roster strip */
-  .roster-strip {
-    @apply flex min-h-[40px] w-full max-w-[480px] flex-none items-center gap-[10px] self-center;
-  }
-  .roster-strip__count {
-    @apply font-display text-[13px] font-bold whitespace-nowrap text-ink;
-  }
-  .roster-strip__row {
-    @apply flex gap-2 overflow-x-auto pb-1;
-    scrollbar-width: thin;
-    -webkit-overflow-scrolling: touch;
-  }
-  .roster-strip__row .chip {
-    @apply flex-none;
   }
 
   /* ── Waiting-room plaza HUD (overlaid on the 3D world) ──────────────────────*/

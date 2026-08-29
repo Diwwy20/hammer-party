@@ -1,19 +1,23 @@
 import { Schema, MapSchema, defineTypes } from "@colyseus/schema";
 import {
-  ARENA_RADIUS,
   DEFAULT_BACK_INDEX,
   DEFAULT_COLOR_INDEX,
   DEFAULT_FACE_INDEX,
   DEFAULT_HAMMER,
   DEFAULT_HAT_INDEX,
   HP_MAX,
-  type GamePhase,
+  LOBBY_RADIUS,
 } from "./constants";
+import { GamePhase, PickupKind, type EventKind, type StageId, type StageTheme } from "./enums";
+import { COLOSSEUM, DEFAULT_STAGE_ID } from "./stages";
 
 /**
  * Colyseus @colyseus/schema state — the "truth" the server owns and broadcasts
  * (binary delta) to every client. Only the SERVER instantiates these; the client
  * decodes via reflection.
+ *
+ * Sync ONLY what clients must agree on. Server-only simulation state (knockback
+ * velocity, cooldown stamps, per-match stats) lives in `server/src/game/`, never here.
  *
  * IMPORTANT: fields are declared with `declare` (type-only, emits NO code) and
  * initialized in the constructor. This is deliberate:
@@ -24,25 +28,30 @@ import {
  *     regardless of how the bundler (esbuild/tsx/tsc) treats class fields.
  */
 
-export type { GamePhase };
+/** Sentinel for the "no session" schema fields (winner / host / active event). */
+export const NO_SESSION = "";
+
+/** `elapsedMs` while no match is running (lobby / results). */
+export const NOT_STARTED_MS = -1;
 
 export class Player extends Schema {
   declare name: string;
 
-  // transform (Phase 01 fills these from input)
+  // transform (server-simulated, client-interpolated)
   declare x: number;
   declare z: number;
   declare dir: number;
 
-  // combat (Phase 02)
+  // combat
   declare hp: number;
   declare alive: boolean;
+  /** current weapon — always a `HammerKind` value. */
   declare hammer: string;
   /** Frozen by a heavy hit — the client suppresses self-prediction while true. */
   declare stunned: boolean;
   /** false while a dropped player's seat is held open for a reconnect. */
   declare connected: boolean;
-  /** kills this match (Phase 04 awards + live scoreboard). */
+  /** kills this match (awards + live scoreboard). */
   declare kills: number;
 
   // lobby / cosmetics
@@ -95,6 +104,7 @@ defineTypes(Player, {
  * `active` toggles off when taken (weapons respawn on a timer; event items don't).
  */
 export class Pickup extends Schema {
+  /** always a `PickupKind` value. */
   declare kind: string;
   declare x: number;
   declare z: number;
@@ -102,7 +112,7 @@ export class Pickup extends Schema {
 
   constructor() {
     super();
-    this.kind = "fast";
+    this.kind = PickupKind.Fast;
     this.x = 0;
     this.z = 0;
     this.active = true;
@@ -120,48 +130,53 @@ export class GameState extends Schema {
   declare players: MapSchema<Player>;
   declare pickups: MapSchema<Pickup>;
   declare phase: GamePhase;
+
+  /** physical wall radius (m) — the plaza in lobby, the stage's radius in a match. */
   declare arenaRadius: number;
   /** current safe-zone radius (m); shrinks over the match. Equals arenaRadius in lobby. */
   declare zoneRadius: number;
-  /** ms since match start; -1 while in lobby */
+  /** ms since match start; `NOT_STARTED_MS` while in the lobby. */
   declare elapsedMs: number;
 
   /** active stage id + theme (client renders visuals from the theme). */
-  declare stageId: string;
-  declare stageTheme: string;
+  declare stageId: StageId;
+  declare stageTheme: StageTheme;
 
-  /** transient event toast (e.g. "⚡ ค้อนทองคำปรากฏ!"); "" when nothing to show. */
-  declare eventBanner: string;
+  /**
+   * The event whose banner is currently up, or `NO_SESSION` for none. The server
+   * publishes the KIND; the client owns the wording (see `config/copy.ts`).
+   */
+  declare activeEvent: EventKind | typeof NO_SESSION;
 
-  /** end-of-match awards as JSON (computed once when phase→"ended"); "" otherwise. */
+  /** end-of-match `MatchAward[]` as JSON (computed once when the phase ends); "" otherwise. */
   declare awardsJson: string;
 
-  /** end-of-match final standings as JSON (ranked winner-first); "" otherwise. */
+  /** end-of-match `MatchStanding[]` as JSON (ranked winner-first); "" otherwise. */
   declare standingsJson: string;
 
   /** Human-readable room code shown on the Host screen / used to join. */
   declare code: string;
   /** sessionId of the invisible Host (director on the big screen); "" if none. */
   declare hostSessionId: string;
-  /** sessionId of the winner once phase==="ended" (""=no survivor / not decided). */
+  /** sessionId of the winner once the match has ended ("" = no survivor / not decided). */
   declare winnerId: string;
 
   constructor() {
     super();
     this.players = new MapSchema<Player>();
     this.pickups = new MapSchema<Pickup>();
-    this.phase = "lobby";
-    this.arenaRadius = ARENA_RADIUS;
-    this.zoneRadius = ARENA_RADIUS;
-    this.elapsedMs = -1;
-    this.stageId = "";
-    this.stageTheme = "";
-    this.eventBanner = "";
+    this.phase = GamePhase.Lobby;
+    this.arenaRadius = LOBBY_RADIUS;
+    this.zoneRadius = LOBBY_RADIUS;
+    this.elapsedMs = NOT_STARTED_MS;
+    this.stageId = DEFAULT_STAGE_ID;
+    this.stageTheme = COLOSSEUM.theme;
+    this.activeEvent = NO_SESSION;
     this.awardsJson = "";
     this.standingsJson = "";
     this.code = "";
-    this.hostSessionId = "";
-    this.winnerId = "";
+    this.hostSessionId = NO_SESSION;
+    this.winnerId = NO_SESSION;
   }
 }
 
@@ -174,7 +189,7 @@ defineTypes(GameState, {
   elapsedMs: "number",
   stageId: "string",
   stageTheme: "string",
-  eventBanner: "string",
+  activeEvent: "string",
   awardsJson: "string",
   standingsJson: "string",
   code: "string",

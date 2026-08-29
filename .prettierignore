@@ -1,0 +1,7 @@
+# Generated / vendored — Prettier must never rewrite these.
+node_modules/
+dist/
+build/
+.vite/
+pnpm-lock.yaml
+packages/client/public/fonts/

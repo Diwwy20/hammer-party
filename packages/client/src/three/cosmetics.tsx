@@ -1,4 +1,14 @@
-import { BACKS, FACES, HATS, PLAYER_COLORS } from "@hammer/shared";
+import {
+  BACKS,
+  BackId,
+  COSMETIC_NONE_ID,
+  FACES,
+  FaceId,
+  HATS,
+  HatId,
+  PLAYER_COLORS,
+  TAU,
+} from "@hammer/shared";
 import type { Cosmetic } from "../store";
 
 /* ── Procedural low-poly cosmetic meshes (swap for glTF later) ────────────────
@@ -6,9 +16,12 @@ import type { Cosmetic } from "../store";
    and the in-game arena — so a hat/face/back looks identical in both. Head center
    ≈ [0, 1.98, 0], size 0.6³.                                                     */
 
+/** Evenly spaced points for the crown's spikes. */
+const SPIKES = [0, 1, 2, 3, 4];
+
 export function Hat({ id }: { id: string }) {
   switch (id) {
-    case "cap":
+    case HatId.Cap:
       return (
         <group>
           <mesh position={[0, 2.36, 0]} castShadow>
@@ -21,15 +34,21 @@ export function Hat({ id }: { id: string }) {
           </mesh>
         </group>
       );
-    case "crown":
+    case HatId.Crown:
       return (
         <group position={[0, 2.42, 0]}>
           <mesh castShadow>
             <cylinderGeometry args={[0.34, 0.34, 0.18, 8]} />
-            <meshStandardMaterial color="#e8c583" metalness={0.85} roughness={0.25} emissive="#7a5a1e" emissiveIntensity={0.4} />
+            <meshStandardMaterial
+              color="#e8c583"
+              metalness={0.85}
+              roughness={0.25}
+              emissive="#7a5a1e"
+              emissiveIntensity={0.4}
+            />
           </mesh>
-          {[0, 1, 2, 3, 4].map((i) => {
-            const a = (i / 5) * Math.PI * 2;
+          {SPIKES.map((i) => {
+            const a = (i / SPIKES.length) * TAU;
             return (
               <mesh key={i} position={[Math.cos(a) * 0.3, 0.16, Math.sin(a) * 0.3]} castShadow>
                 <coneGeometry args={[0.07, 0.18, 6]} />
@@ -39,7 +58,7 @@ export function Hat({ id }: { id: string }) {
           })}
         </group>
       );
-    case "horns":
+    case HatId.Horns:
       return (
         <group position={[0, 2.24, 0]}>
           {[-1, 1].map((s) => (
@@ -50,7 +69,7 @@ export function Hat({ id }: { id: string }) {
           ))}
         </group>
       );
-    case "tophat":
+    case HatId.TopHat:
       return (
         <group position={[0, 2.3, 0]}>
           <mesh castShadow>
@@ -67,7 +86,7 @@ export function Hat({ id }: { id: string }) {
           </mesh>
         </group>
       );
-    case "party":
+    case HatId.Party:
       return (
         <group position={[0, 2.32, 0]}>
           <mesh position={[0, 0.28, 0]} castShadow>
@@ -89,21 +108,26 @@ export function Face({ id }: { id: string }) {
   const z = 0.29;
   const y = 2.04;
   switch (id) {
-    case "shades":
+    case FaceId.Shades:
       return (
         <mesh position={[0, y, z]}>
           <boxGeometry args={[0.52, 0.13, 0.06]} />
           <meshStandardMaterial color="#101014" roughness={0.3} metalness={0.4} />
         </mesh>
       );
-    case "visor":
+    case FaceId.Visor:
       return (
         <mesh position={[0, y, z]}>
           <boxGeometry args={[0.54, 0.16, 0.05]} />
-          <meshStandardMaterial color="#39e0e0" emissive="#39e0e0" emissiveIntensity={0.8} roughness={0.2} />
+          <meshStandardMaterial
+            color="#39e0e0"
+            emissive="#39e0e0"
+            emissiveIntensity={0.8}
+            roughness={0.2}
+          />
         </mesh>
       );
-    case "nerd":
+    case FaceId.Nerd:
       return (
         <group position={[0, y, z]}>
           {[-0.14, 0.14].map((x) => (
@@ -118,7 +142,7 @@ export function Face({ id }: { id: string }) {
           </mesh>
         </group>
       );
-    case "eyepatch":
+    case FaceId.Eyepatch:
       return (
         <group position={[0, y, z]}>
           <mesh position={[-0.14, 0, 0]}>
@@ -138,14 +162,14 @@ export function Face({ id }: { id: string }) {
 
 export function Back({ id }: { id: string }) {
   switch (id) {
-    case "cape":
+    case BackId.Cape:
       return (
         <mesh position={[0, 1.08, -0.32]} rotation={[0.14, 0, 0]} castShadow>
           <boxGeometry args={[0.74, 1.05, 0.05]} />
           <meshStandardMaterial color="#b0324a" side={2} />
         </mesh>
       );
-    case "backpack":
+    case BackId.Backpack:
       return (
         <group position={[0, 1.15, -0.36]}>
           <mesh castShadow>
@@ -158,18 +182,23 @@ export function Back({ id }: { id: string }) {
           </mesh>
         </group>
       );
-    case "wings":
+    case BackId.Wings:
       return (
         <group position={[0, 1.3, -0.28]}>
           {[-1, 1].map((s) => (
             <mesh key={s} position={[0.34 * s, 0, 0]} rotation={[0, 0.5 * s, 0.25 * s]} castShadow>
               <boxGeometry args={[0.5, 0.7, 0.05]} />
-              <meshStandardMaterial color="#eaf2ff" emissive="#8fb6ff" emissiveIntensity={0.15} side={2} />
+              <meshStandardMaterial
+                color="#eaf2ff"
+                emissive="#8fb6ff"
+                emissiveIntensity={0.15}
+                side={2}
+              />
             </mesh>
           ))}
         </group>
       );
-    case "jetpack":
+    case BackId.Jetpack:
       return (
         <group position={[0, 1.16, -0.36]}>
           {[-0.22, 0.22].map((x) => (
@@ -192,15 +221,17 @@ export function Back({ id }: { id: string }) {
 }
 
 /**
- * The blocky low-poly body (legs + torso + head) with cosmetics layered on — the
- * shared avatar used by both the lobby preview and the arena. No hammer here: the
- * lobby adds a static shoulder hammer, the arena adds an animated held one.
+ * The blocky low-poly body (legs + torso + head) with cosmetics layered on.
+ *
+ * The SAME avatar draws the plaza lobby and the arena, so a hat looks identical in
+ * both and a dress-up edit shows up in-world immediately. No hammer here — that is
+ * the animated view-model in `PlayerAvatar`.
  */
 export function AvatarBody({ cosmetic, isMe = false }: { cosmetic: Cosmetic; isMe?: boolean }) {
   const color = PLAYER_COLORS[cosmetic.colorIndex] ?? PLAYER_COLORS[0];
-  const hatId = HATS[cosmetic.hatIndex]?.id ?? "none";
-  const faceId = FACES[cosmetic.faceIndex]?.id ?? "none";
-  const backId = BACKS[cosmetic.backIndex]?.id ?? "none";
+  const hatId = HATS[cosmetic.hatIndex]?.id ?? COSMETIC_NONE_ID;
+  const faceId = FACES[cosmetic.faceIndex]?.id ?? COSMETIC_NONE_ID;
+  const backId = BACKS[cosmetic.backIndex]?.id ?? COSMETIC_NONE_ID;
 
   return (
     <group>
@@ -217,7 +248,13 @@ export function AvatarBody({ cosmetic, isMe = false }: { cosmetic: Cosmetic; isM
       {/* body */}
       <mesh position={[0, 1.15, 0]} castShadow>
         <boxGeometry args={[0.82, 0.9, 0.5]} />
-        <meshStandardMaterial color={color} emissive={isMe ? color : "#000000"} emissiveIntensity={isMe ? 0.22 : 0} roughness={0.6} metalness={0.05} />
+        <meshStandardMaterial
+          color={color}
+          emissive={isMe ? color : "#000000"}
+          emissiveIntensity={isMe ? 0.22 : 0}
+          roughness={0.6}
+          metalness={0.05}
+        />
       </mesh>
       {/* head */}
       <mesh position={[0, 1.98, 0]} castShadow>

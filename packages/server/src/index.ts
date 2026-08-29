@@ -2,20 +2,25 @@ import { createServer } from "node:http";
 import { Server } from "colyseus";
 import { WebSocketTransport } from "@colyseus/ws-transport";
 import { ROOM_NAME } from "@hammer/shared";
+import { EXIT_FAILURE, HEALTH_PATH, HTTP_STATUS, serverConfig } from "./config";
+import { createLogger } from "./logger";
 import { GameRoom } from "./rooms/GameRoom";
 
-const port = Number(process.env.PORT ?? 2567);
+/**
+ * Process entry point: an HTTP server that exists only to carry the Colyseus
+ * WebSocket transport (plus a health check). There is no HTTP data API — every
+ * result is per-match and lives in the room state.
+ */
 
-// Bare HTTP server — just enough to host the Colyseus WebSocket transport and a
-// health check. (No leaderboard API any more: results are per-match only, shown on
-// the Results screen and never persisted.)
+const log = createLogger();
+
 const httpServer = createServer((req, res) => {
-  if (req.url === "/api/health") {
-    res.writeHead(200, { "Content-Type": "application/json" });
+  if (req.url === HEALTH_PATH) {
+    res.writeHead(HTTP_STATUS.Ok, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ ok: true }));
     return;
   }
-  res.writeHead(404);
+  res.writeHead(HTTP_STATUS.NotFound);
   res.end();
 });
 
@@ -26,11 +31,11 @@ const gameServer = new Server({ transport: new WebSocketTransport({ server: http
 gameServer.define(ROOM_NAME, GameRoom).filterBy(["code"]);
 
 gameServer
-  .listen(port)
+  .listen(serverConfig.port)
   .then(() => {
-    console.log(`⚔️  Hammer Party server listening on ws://localhost:${port}`);
+    log.info(`⚔️  Hammer Party server listening on ws://localhost:${serverConfig.port}`);
   })
   .catch((err) => {
-    console.error("Failed to start server:", err);
-    process.exit(1);
+    log.error("Failed to start server:", err);
+    process.exit(EXIT_FAILURE);
   });

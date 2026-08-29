@@ -1,10 +1,4 @@
-import {
-  DEFAULT_BACK_INDEX,
-  DEFAULT_COLOR_INDEX,
-  DEFAULT_FACE_INDEX,
-  DEFAULT_HAT_INDEX,
-} from "@hammer/shared";
-import { useGame, type Cosmetic } from "../store";
+import { FALLBACK_COSMETIC, selectMe, useGame, type Cosmetic } from "../store";
 import { Customizer } from "./Customizer";
 
 /**
@@ -14,10 +8,10 @@ import { Customizer } from "./Customizer";
  * are read as primitives so the 20Hz movement stream doesn't churn this component.
  */
 export function CustomizeSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const colorIndex = useGame((s) => (s.sessionId ? (s.players[s.sessionId]?.colorIndex ?? DEFAULT_COLOR_INDEX) : DEFAULT_COLOR_INDEX));
-  const hatIndex = useGame((s) => (s.sessionId ? (s.players[s.sessionId]?.hatIndex ?? DEFAULT_HAT_INDEX) : DEFAULT_HAT_INDEX));
-  const faceIndex = useGame((s) => (s.sessionId ? (s.players[s.sessionId]?.faceIndex ?? DEFAULT_FACE_INDEX) : DEFAULT_FACE_INDEX));
-  const backIndex = useGame((s) => (s.sessionId ? (s.players[s.sessionId]?.backIndex ?? DEFAULT_BACK_INDEX) : DEFAULT_BACK_INDEX));
+  const colorIndex = useGame((s) => selectMe(s)?.colorIndex ?? FALLBACK_COSMETIC.colorIndex);
+  const hatIndex = useGame((s) => selectMe(s)?.hatIndex ?? FALLBACK_COSMETIC.hatIndex);
+  const faceIndex = useGame((s) => selectMe(s)?.faceIndex ?? FALLBACK_COSMETIC.faceIndex);
+  const backIndex = useGame((s) => selectMe(s)?.backIndex ?? FALLBACK_COSMETIC.backIndex);
 
   if (!open) return null;
   const cosmetic: Cosmetic = { colorIndex, hatIndex, faceIndex, backIndex };

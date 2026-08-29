@@ -1,4 +1,11 @@
-import { INTERP_DELAY_MS } from "@hammer/shared";
+import { INTERP_DELAY_MS, TICK_RATE, clamp01, lerp, lerpAngle } from "@hammer/shared";
+
+/**
+ * The interpolation buffer: keep the last second or so of authoritative snapshots
+ * and render OTHER players `INTERP_DELAY_MS` in the past, between the two snapshots
+ * that bracket that moment. That delay is what turns a 20Hz stream into smooth
+ * motion — the local player is predicted instead (see `three/World.tsx`).
+ */
 
 /** A player's transform as broadcast by the server. */
 export interface Pos {
@@ -8,13 +15,16 @@ export interface Pos {
 }
 
 interface Snapshot {
-  t: number; // performance.now() when received
+  /** `performance.now()` when the patch arrived */
+  t: number;
   pos: Record<string, Pos>;
 }
 
-/** Ring buffer of recent authoritative snapshots (~1.5s at 20Hz). */
+/** ~1.5s of history at the server tick rate — plenty to interpolate inside. */
+const BUFFER_SECONDS = 1.5;
+const MAX_SNAPSHOTS = Math.ceil(TICK_RATE * BUFFER_SECONDS);
+
 const buffer: Snapshot[] = [];
-const MAX_SNAPSHOTS = 30;
 
 export function recordSnapshot(pos: Record<string, Pos>): void {
   buffer.push({ t: performance.now(), pos });
@@ -34,46 +44,33 @@ export function latest(id: string): Pos | null {
 }
 
 /**
- * Position of `id` rendered INTERP_DELAY_MS in the past, lerped between the two
+ * Position of `id` rendered `INTERP_DELAY_MS` in the past, lerped between the two
  * snapshots that bracket that render time — smooth motion for other players.
  */
 export function sampleOther(id: string, now: number): Pos | null {
-  const renderT = now - INTERP_DELAY_MS;
+  const renderAt = now - INTERP_DELAY_MS;
 
-  let a: Snapshot | undefined;
-  let b: Snapshot | undefined;
+  let before: Snapshot | undefined;
+  let after: Snapshot | undefined;
   for (let i = buffer.length - 1; i >= 0; i--) {
-    if (buffer[i].t <= renderT) {
-      a = buffer[i];
-      b = buffer[i + 1];
+    if (buffer[i].t <= renderAt) {
+      before = buffer[i];
+      after = buffer[i + 1];
       break;
     }
   }
-  if (!a) a = buffer[0];
-  if (!a || !a.pos[id]) return latest(id);
-  const pa = a.pos[id];
-  if (!b || !b.pos[id]) return pa;
+  if (!before) before = buffer[0];
+  if (!before || !before.pos[id]) return latest(id); // no history yet — snap to newest
 
-  const span = b.t - a.t || 1;
-  const f = clamp01((renderT - a.t) / span);
+  const from = before.pos[id];
+  if (!after || !after.pos[id]) return from; // nothing newer to lerp toward
+
+  const to = after.pos[id];
+  const span = after.t - before.t || 1;
+  const f = clamp01((renderAt - before.t) / span);
   return {
-    x: lerp(pa.x, b.pos[id].x, f),
-    z: lerp(pa.z, b.pos[id].z, f),
-    dir: lerpAngle(pa.dir, b.pos[id].dir, f),
+    x: lerp(from.x, to.x, f),
+    z: lerp(from.z, to.z, f),
+    dir: lerpAngle(from.dir, to.dir, f),
   };
-}
-
-function lerp(a: number, b: number, f: number): number {
-  return a + (b - a) * f;
-}
-
-/** Shortest-path angle interpolation (radians). */
-function lerpAngle(a: number, b: number, f: number): number {
-  let d = ((b - a + Math.PI) % (Math.PI * 2)) - Math.PI;
-  if (d < -Math.PI) d += Math.PI * 2;
-  return a + d * f;
-}
-
-function clamp01(n: number): number {
-  return n < 0 ? 0 : n > 1 ? 1 : n;
 }

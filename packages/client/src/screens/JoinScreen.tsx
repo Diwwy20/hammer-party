@@ -1,39 +1,48 @@
 import { useMemo, useState } from "react";
-import { ROOM_CODE_LENGTH, randomRoomCode } from "@hammer/shared";
+import { MAX_NAME_LENGTH, ROOM_CODE_LENGTH, randomRoomCode } from "@hammer/shared";
 import { connect } from "../net/session";
+import { HOST_DISPLAY_NAME, JOIN_PARAM, normaliseRoomCode } from "../net/config";
 
-/** ?room=CODE prefills the code (from a scanned QR); ?host = big-screen Host mode. */
-function readUrl() {
-  const q = new URLSearchParams(location.search);
+/**
+ * The front door. Two ways in:
+ *   - a player scans the QR (`?room=CODE`) and only has to pick a name
+ *   - the big screen opens `?host` and creates a room
+ */
+
+const COPY = {
+  missingName: "ตั้งชื่อตัวละครก่อนนะ",
+  badCode: `โค้ดห้องต้องมี ${ROOM_CODE_LENGTH} ตัว`,
+} as const;
+
+/** `?room=CODE` prefills the code (from a scanned QR); `?host` = big-screen Host mode. */
+function readJoinLink() {
+  const query = new URLSearchParams(location.search);
   return {
-    code: (q.get("room") ?? "")
-      .toUpperCase()
-      .replace(/[^A-Z0-9]/g, "")
-      .slice(0, ROOM_CODE_LENGTH),
-    host: q.has("host"),
+    code: normaliseRoomCode(query.get(JOIN_PARAM.Room) ?? ""),
+    isHost: query.has(JOIN_PARAM.Host),
   };
 }
 
 export function JoinScreen() {
-  const url = useMemo(readUrl, []);
-  const knewCode = url.code.length === ROOM_CODE_LENGTH;
+  const link = useMemo(readJoinLink, []);
+  const arrivedWithCode = link.code.length === ROOM_CODE_LENGTH;
 
   const [name, setName] = useState("");
-  const [code, setCode] = useState(url.code);
-  const [editCode, setEditCode] = useState(!knewCode); // show the code field only when needed
-  const [err, setErr] = useState("");
+  const [code, setCode] = useState(link.code);
+  const [editingCode, setEditingCode] = useState(!arrivedWithCode); // show the field only when needed
+  const [error, setError] = useState("");
 
   const joinAsPlayer = () => {
-    const n = name.trim();
-    if (!n) return setErr("ตั้งชื่อตัวละครก่อนนะ");
-    if (code.length !== ROOM_CODE_LENGTH) return setErr(`โค้ดห้องต้องมี ${ROOM_CODE_LENGTH} ตัว`);
-    setErr("");
-    void connect({ name: n, code });
+    const trimmed = name.trim();
+    if (!trimmed) return setError(COPY.missingName);
+    if (code.length !== ROOM_CODE_LENGTH) return setError(COPY.badCode);
+    setError("");
+    void connect({ name: trimmed, code });
   };
 
   const hostRoom = () => {
-    setErr("");
-    void connect({ name: "HOST", asHost: true, code: randomRoomCode() });
+    setError("");
+    void connect({ name: HOST_DISPLAY_NAME, asHost: true, code: randomRoomCode() });
   };
 
   return (
@@ -44,7 +53,7 @@ export function JoinScreen() {
           <p className="hero-sub">ทุบให้เหลือคนสุดท้าย!</p>
         </div>
 
-        {url.host ? (
+        {link.isHost ? (
           <div className="panel">
             <p className="panel__title">เปิดจอ Host</p>
             <p className="muted mb-4 leading-relaxed">
@@ -63,7 +72,7 @@ export function JoinScreen() {
               <input
                 className="input"
                 value={name}
-                maxLength={16}
+                maxLength={MAX_NAME_LENGTH}
                 autoFocus
                 placeholder="เช่น อัศวินค้อนทอง"
                 onChange={(e) => setName(e.target.value)}
@@ -71,10 +80,10 @@ export function JoinScreen() {
               />
             </label>
 
-            {knewCode && !editCode ? (
+            {arrivedWithCode && !editingCode ? (
               <div className="row mb-[14px] justify-between">
                 <span className="pill pill--code">⚔ ห้อง {code}</span>
-                <button className="link-btn" onClick={() => setEditCode(true)}>
+                <button className="link-btn" onClick={() => setEditingCode(true)}>
                   เข้าห้องอื่น?
                 </button>
               </div>
@@ -87,13 +96,13 @@ export function JoinScreen() {
                   maxLength={ROOM_CODE_LENGTH}
                   placeholder="ABCD"
                   autoCapitalize="characters"
-                  onChange={(e) => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))}
+                  onChange={(e) => setCode(normaliseRoomCode(e.target.value))}
                   onKeyDown={(e) => e.key === "Enter" && joinAsPlayer()}
                 />
               </label>
             )}
 
-            {err && <p className="error-text mb-3">{err}</p>}
+            {error && <p className="error-text mb-3">{error}</p>}
 
             <button className="btn btn--gold" onClick={joinAsPlayer}>
               ⚔ เข้าเล่น

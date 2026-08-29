@@ -4,9 +4,6 @@ build/
 .vite/
 *.tsbuildinfo
 
-# runtime data (leaderboard store)
-packages/server/data/
-
 # env
 .env
 .env.*

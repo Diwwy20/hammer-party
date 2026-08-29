@@ -1,7 +1,8 @@
 import { QRCodeSVG } from "qrcode.react";
 import { MAX_PLAYERS, MIN_PLAYERS_TO_START, STAGES, STAGE_ORDER } from "@hammer/shared";
-import { useGame } from "../store";
+import { selectPlayerCount, selectReadyCount, useGame } from "../store";
 import { sendStart, sendStage, leaveRoom } from "../net/session";
+import { buildJoinUrl } from "../net/config";
 
 /**
  * Host big-screen overlay for the waiting-room plaza. The 3D plaza (everyone's
@@ -9,13 +10,23 @@ import { sendStart, sendStage, leaveRoom } from "../net/session";
  * code, count, the stage picker and Start. No name roster — the plaza avatars ARE
  * the roster. Primitive selectors keep the 20Hz stream from re-rendering it.
  */
+
+const QR = {
+  sizePx: 168,
+  errorCorrection: "M",
+  /** dark ink on a transparent card, so the QR sits on the panel's own white. */
+  foreground: "#1a1206",
+} as const;
+
+/** Shown while the room code hasn't arrived yet. */
+const CODE_PLACEHOLDER = "----";
+
 export function HostLobbyOverlay() {
   const code = useGame((s) => s.code);
-  const count = useGame((s) => Object.keys(s.players).length);
-  const readyCount = useGame((s) => Object.values(s.players).filter((p) => p.ready).length);
+  const count = useGame(selectPlayerCount);
+  const readyCount = useGame(selectReadyCount);
   const stageId = useGame((s) => s.stageId);
 
-  const joinUrl = `${location.origin}/?room=${code}`;
   const canStart = count >= MIN_PLAYERS_TO_START;
 
   return (
@@ -26,9 +37,15 @@ export function HostLobbyOverlay() {
 
       <p className="host-overlay__lead">สแกนเพื่อเข้าร่วม</p>
       <div className="qr-card mx-auto w-fit">
-        <QRCodeSVG value={joinUrl} size={168} level="M" bgColor="transparent" fgColor="#1a1206" />
+        <QRCodeSVG
+          value={buildJoinUrl(code)}
+          size={QR.sizePx}
+          level={QR.errorCorrection}
+          bgColor="transparent"
+          fgColor={QR.foreground}
+        />
       </div>
-      <div className="code-big text-center">{code || "----"}</div>
+      <div className="code-big text-center">{code || CODE_PLACEHOLDER}</div>
 
       <div className="row justify-center gap-2">
         <span className="pill">

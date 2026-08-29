@@ -13,13 +13,16 @@ commit. The biggest risk (syncing 25 players) is pulled forward to Phase 01.
 ---
 
 ## Phase 00 — Init & Foundation ✅
+
 Monorepo (`@hammer/shared|server|client`), `shared/constants.ts`, Colyseus room handshake,
 R3F canvas. Done.
 
 ## Phase 01 — Join · Lobby · Movement ✅ (proved risk #1)
+
 🎯 25 phones in one room, walking and seeing each other smoothly.
 
 **Lobby slice — ✅ DONE:**
+
 - Join-by-code: Host `create` room (code via `filterBy`), player `join` by code from the QR — **name only** (code comes from `?room=`; a fallback code field shows if opened without a QR).
 - Host role (asHost, not a player, presses Start), host reassign on leave.
 - Entry **Splash** screen (progress bar + tips → `booted`).
@@ -29,6 +32,7 @@ R3F canvas. Done.
 - Cartoon-minimal theme applied.
 
 **Movement — ✅ DONE:**
+
 - Virtual joystick (nipplejs, `GameScreen`) → `sendInput` at 20Hz → server moves players in the 20Hz loop (`GameRoom.update`, clamps to arena, spawns on a ring at Start) → client **interpolates** others ~100ms back + **predicts** self, third-person follow-cam, floating name tags (drei `Html`).
 - Netcode buffer in `client/src/net/movement.ts`; input in `net/session.ts` `sendInput`.
 - Verified: headless 2-client integration test (spawn→move→clamp→halt) + in-browser client run with no errors.
@@ -36,23 +40,29 @@ R3F canvas. Done.
 - 📦 `feat: virtual joystick + authoritative 25-player movement (interp + prediction)`
 
 ## Phase 02 — Combat ✅ — kill + the game can end
+
 Medium hammer + attack input + cooldown · server hit detection (reach + swing-arc cone) · damage/HP · knockback (impulse+decay) · heavy-hammer stun · death → spectator + client-only ragdoll · win `alive==1` → Results · reconnection · Host spectator free-cam + Restart.
+
 - **First-person** player cam (host + dead keep the orbit spectator cam); attack button holds-to-swing.
 - Combat resolves server-side in `server/rooms/GameRoom.ts` (`handleAttack`); swing/hit are **broadcasts**, not schema — client FX in `client/src/net/combat.ts`. New synced fields: `Player.stunned/connected`, `GameState.winnerId`.
 - Reconnection: server `allowReconnection` (RECONNECT_SECONDS) + client `colyseus.reconnect(token)` in `net/session.ts`.
 - Verified: headless host+2-player smoke (walk together → damage → death → `phase="ended"` + winner). ⚠️ reconnection wired but not yet tested on real flaky wifi.
-✅ Done when a full match plays to the end; dropping and reconnecting works.
+  ✅ Done when a full match plays to the end; dropping and reconnecting works.
 
 ## Phase 03 — Arena · Zone · Weapons ✅
+
 Shrinking zone (out-of-zone HP bleed, eases-in to force a finish ~12min, well under the 20min cap) · Fast/Heavy hammer pickups (respawn) · wall-slam (knockback into wall = extra dmg + stun) · Golden Hammer + Heal-orb events (auto + Host trigger) · **stage as config** for future maps.
+
 - **Stage is data** in `shared/stages.ts` (`COLOSSEUM`): `{radius, spawnRadius, zone, weaponSpawns, wallSlam, theme}`; server reads it, so a new map only swaps config. `zoneRadiusAt()` is a pure, testable shrink curve.
 - New synced state: `Pickup` map + `GameState.zoneRadius/stageId/stageTheme/eventBanner`. Host events via `ClientMsg.Event`; client renders lava floor + shrinking safe disc + out-of-zone warning + event banner in `GameScreen.tsx`.
 - Verified: headless smoke (weapon swap, Golden/Heal events spawn + banner) + zone-curve check + in-browser run (host event → banner reaches player, no console errors).
 - Trimmed per "keep events few": meteor/low-gravity/speed-buff/comeback + hazard-wall props deferred (speed buff needs synced move-speed for client prediction). Dead-player event voting is Phase 04.
-✅ Done when a match plays end-to-end with the zone forcing a finish; pickups + events work.
+  ✅ Done when a match plays end-to-end with the zone forcing a finish; pickups + events work.
 
 ## Phase 04 — Juice · Cosmetics · Polish ✅
+
 Cosmetics on in-game avatars, full Results/awards, Zod input validation + name filter, dead-player prank throws, SFX, self-host fonts for offline.
+
 - **Cosmetics finished**: shared procedural meshes in `client/src/three/cosmetics.tsx` (`Hat/Face/Back/AvatarBody`), used by both the plaza-lobby avatars and the arena avatars (first-person eye height retuned to the full-size body).
 - **Awards**: server tracks kills (`Player.kills`) + damage/wall-slams/first-blood/survival (server-only), computes 5 awards at end → `GameState.awardsJson`; Results overlay renders champion + award cards.
 - **Zod + name filter**: `packages/server/src/validate.ts` — thin `safeParse` on input/ready/cosmetic/event/prank + `cleanName` (control-strip, clamp, profanity mask). `zod` added to `@hammer/server`.
@@ -61,32 +71,82 @@ Cosmetics on in-game avatars, full Results/awards, Zod input validation + name f
 - **SFX**: synthesized WebAudio in `client/src/audio.ts` (no asset files → offline).
 - Verified: headless smokes (pranks: only-dead-can-throw + harass-not-kill; awards populate with correct winners) + in-browser run (fonts load, name masked, no console errors).
 - ⚠️ **Still owed (do at the event):** a real ~25-device load test (fps/latency) + full dress rehearsal + LAN fallback; reconnection untested on flaky wifi. glTF models skipped (procedural is fine).
-✅ Done when a match plays to Results with awards; cosmetics show in-arena; the build runs offline.
+  ✅ Done when a match plays to Results with awards; cosmetics show in-arena; the build runs offline.
 
 ## Phase 05 — Post-event ✅
+
 New stages via config.
+
 - **3 stages** (`colosseum`/`pit`/`grand`) in `shared/src/stages.ts` — each with its own radius/zone/weaponSpawns/wallSlam/`label`/theme; `STAGE_ORDER` drives picker order.
 - **Host stage picker** in the lobby: `ClientMsg.SetStage` (host + lobby only, Zod-checked) → server sets `selectedStageId`, applied in `beginMatch`; lobby shows it via synced `GameState.stageId`. Client theme colors in `GameScreen`'s `STAGE_THEMES` (visual only).
 - Verified: headless smoke (host picks `grand` → radius 30 applies → match plays to end) + in-browser (picker click-to-pick round-trips).
-✅ Done when the Host can pick a stage that applies to the next match.
+  ✅ Done when the Host can pick a stage that applies to the next match.
 
 ## Post-05 refactor — Walkable 3D lobby + per-match results ✅
+
 Owner-requested (2026-08): the lobby became a live 3D plaza and the **monthly leaderboard was removed** (results are per-match only, shown on a screen the Host leaves up).
+
 - **One world, all phases**: `App` routes every phase to `GameScreen`; it renders phase overlays (`LobbyBar`/`CustomizeSheet`/`HostLobbyOverlay`/`ResultsOverlay`). No more `LobbyScreen`/`HostScreen`/`CharacterPreview`.
 - **Plaza lobby**: `LOBBY_RADIUS` in constants; server `updateLobby()` (walk + knockback, no zone/pickups/damage), `handleAttack` gated so damage/kills only in `playing` (lobby bonks = knockback + swing FX, **no HP loss**), `spawnLobbyPlayer()` on join/reset. Client: third-person follow cam in lobby, name tags/HP hidden, **only the room count `X/25` — no other names**.
 - **Results**: `GameState.standingsJson` (winner-first ranking) + `awardsJson`; `ResultsOverlay` shows standings + funny awards, closeable (dismiss is local; nothing persisted).
 - **Removed**: `server/src/leaderboard.ts`, express + `/api/leaderboard`, `client/src/{components/Leaderboard.tsx,net/leaderboard.ts}`, TanStack Query (+ `QueryClientProvider`), `HTTP_URL`.
 - Verified in-browser: plaza HUD (no names) · dress-up sheet · Host QR/stage-picker/Start · plaza→combat→Results(standings+awards)→restart loop; no console errors.
-✅ Done when players gather/bonk in a 3D plaza and a match ends on a standings+awards screen (no persistence).
+  ✅ Done when players gather/bonk in a 3D plaza and a match ends on a standings+awards screen (no persistence).
 
-## 🎉 All phases (00–05 + 3D-lobby refactor) complete — remaining work is event-day hardening (real 25-device load test, dress rehearsal, LAN fallback, reconnection on flaky wifi).
+## Post-05 architecture pass — separation of concerns + no magic values ✅
+
+Owner-requested (2026-08): a senior-level cleanup, no gameplay redesign. Behaviour is unchanged except where noted.
+
+- **Closed value sets → `shared/src/enums.ts`**: `GamePhase`, `HammerKind`, `PickupKind`, `EventKind`, `PrankKind`,
+  `StageId`, `StageTheme`, `CosmeticSlot`, `HatId`/`FaceId`/`BackId`, `AwardKind`, `JoinError`. Every comparison
+  now reads `phase === GamePhase.Playing` — **no bare string literals**. `shared/src/math.ts` holds the pure
+  helpers both sides must agree on (`lerpAngle` was duplicated in two client files).
+- **Every magic number named**: `KNOCKBACK_STOP_SPEED`, `WALL_SLAM_COOLDOWN_MS`, `HIT_MIN_DISTANCE`,
+  `AUTO_EVENT_AT_MS`, `HEAL_ORB_*`, `MAX_NAME_LENGTH`, `MIN_PLAYERS_FOR_WIN`, `DEFAULT_SERVER_PORT`, … in
+  `shared/constants.ts`; presentation tuning moved to `client/src/config/{view,theme}.ts`; network policy to
+  `client/src/net/config.ts`.
+- **Server split**: `GameRoom.ts` went 771 → ~175 lines and is now purely a Colyseus adapter (connect · validate ·
+  route · tick). The game lives in `server/src/game/` behind `MatchSimulation` (`combat`, `movement`, `pickups`,
+  `events`, `spawn`, `cosmetics`, `results`, `context`), plus `logger.ts` and `config.ts`. `validate.ts` → `net/`.
+  `results.ts` ranking rules are pure functions over a stat snapshot.
+- **Client split**: `GameScreen.tsx` went 897 → ~105 lines of composition. The world moved to `three/`
+  (`World`, `Arena`, `Pickups`, `PlayerAvatar`, `useSelfControl`), the HUD to `components/hud/` (9 components),
+  per-frame non-React state to `runtime/` (`combatFx`, `localPlayer`, `input`), SFX to `hooks/useMatchSfx`.
+  `store.ts` gained primitive selectors + `usePlayerField`.
+- **Server states facts, client owns copy** (2 wire changes): `GameState.eventBanner` (a Thai sentence) →
+  `GameState.activeEvent` (an `EventKind`); awards are now `MatchAward {kind, name, value}` instead of
+  pre-rendered `{icon,label,name,detail}`. Wording lives in `client/src/config/copy.ts`. The `Award`/`Standing`
+  interfaces were duplicated in server + client — they're now `MatchAward`/`MatchStanding` in `shared/messages.ts`.
+- **Behaviour changes (deliberate, small):** `MATCH_MAX_MS` is now enforced as a failsafe (at the documented
+  20-min hard cap the healthiest survivor wins instead of the room hanging); the Host-view HUD says
+  "มุมมอง Host" instead of the banned "เจ้าภาพ".
+- **Dead code removed**: unused `ClientMsg.Pickup`, the leftover `packages/server/data/leaderboard.json` +
+  its `.gitignore` entry, and 9 orphaned CSS recipes from the deleted 2D lobby/host screens.
+- Verified: `pnpm -r typecheck` + `pnpm lint` clean · headless smoke (plaza bonk costs no HP → stage pick →
+  start → golden-hammer event → fight → standings + structured awards → restart) · in-browser host+2 players
+  (QR link → plaza → dress-up → stage picker → start → combat HUD → event banner → Results → restart), zero
+  console errors.
+- **Tests (vitest)**: `pnpm test` runs 109 colocated unit tests over the pure rules — shared math,
+  `zoneRadiusAt`/`findStage`, enum + catalog consistency, `swingImpact`, `computeStandings`/`computeAwards`,
+  `cleanName` + every Zod edge schema, `toWorld`, `parseJson`, the theme lookups. `pnpm test:e2e`
+  (`packages/server/scripts/smoke-e2e.ts`) drives a real Host + 2 players through a full match loop.
+  Two bugs fell out of writing them: `findStage("__proto__")` returned `Object.prototype`, and `cleanName`
+  stripped tabs/newlines **before** collapsing whitespace, gluing "Ann<TAB>Lee" into "AnnLee".
+- 📦 `refactor: split server sim + client HUD by responsibility, kill magic values`
+
+## 🎉 All phases (00–05 + 3D-lobby refactor + architecture pass) complete — remaining work is event-day hardening (real 25-device load test, dress rehearsal, LAN fallback, reconnection on flaky wifi).
 
 ---
 
 ## Guardrails
+
 - **Front-load risk:** Phase 01 Movement must prove "25 phones walking smoothly." That's the gate.
 - **Playable at every phase boundary.** No half-phase merges.
 - **One commit per phase** (imperative summary). The repo owner runs git — hand over the command, no "Co-Authored-By: Claude".
+- **No magic values in new code.** A compared string → `shared/enums.ts`; a simulation number → `shared/constants.ts`;
+  a look-and-feel number → `client/config/view.ts`. See `game-architecture` for the full table.
+- **A new rule ships with a test.** Put the decision in a pure function and unit-test it; leave sockets,
+  rooms and canvases to `pnpm test:e2e` rather than mocking them.
 - Phase 04-late and 05 are cut candidates near a deadline.
 
 Full status: [docs/hammer-party-status.pdf](../../../docs/hammer-party-status.pdf).

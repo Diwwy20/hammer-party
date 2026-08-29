@@ -1,36 +1,55 @@
 import { useEffect, useState } from "react";
-import { useGame } from "./store";
+import { clamp } from "@hammer/shared";
+import { Conn, useGame } from "./store";
 import { leaveRoom } from "./net/session";
+import { CONNECT_ERROR, SPLASH_TIPS } from "./config/copy";
+import { SPLASH } from "./config/view";
 import { JoinScreen } from "./screens/JoinScreen";
 import { GameScreen } from "./screens/GameScreen";
 
-const TIPS = [
-  "ค้อนแรงเหวี่ยงไกล แต่ตีช้า — จังหวะคือทุกอย่าง",
-  "โดนผลักไปชนกำแพงหนาม = เจ็บกว่าเดิม ระวังขอบสนาม",
-  "เก็บค้อนในแมพเพื่อเปลี่ยนสไตล์การเล่น",
-  "ตายแล้วยังป่วนต่อได้ — ปาของใส่คนที่ยังรอด",
-];
+/**
+ * Screen routing. Everything is driven by the connection lifecycle (`conn`) plus the
+ * one-shot `booted` flag — the GAME phase (lobby/playing/ended) is handled inside
+ * `GameScreen`, which is a single live 3D world for all of them.
+ */
+export function App() {
+  const conn = useGame((s) => s.conn);
+  const booted = useGame((s) => s.booted);
+
+  if (conn === Conn.Idle) return <JoinScreen />;
+  if (conn === Conn.Error) return <ErrorScreen />;
+  if (conn === Conn.Connecting || !booted) return <SplashScreen />;
+
+  // connected and booted — one live 3D world drives every phase, for players and Host
+  return <GameScreen />;
+}
 
 /** Branded entry splash: eases a progress bar up, finishes when the room is open. */
 function SplashScreen() {
   const conn = useGame((s) => s.conn);
-  const [pct, setPct] = useState(6);
-  const [tip] = useState(() => TIPS[Math.floor(Math.random() * TIPS.length)]);
+  const [pct, setPct] = useState<number>(SPLASH.startPct);
+  const [tip] = useState(() => SPLASH_TIPS[Math.floor(Math.random() * SPLASH_TIPS.length)]);
 
+  // creep toward the target: parked below the end until the room is actually open
   useEffect(() => {
-    const id = setInterval(() => {
-      setPct((p) => {
-        const target = useGame.getState().conn === "open" ? 100 : 90;
-        return Math.min(target, p + Math.max(0.6, (target - p) * 0.09));
+    const timer = window.setInterval(() => {
+      setPct((current) => {
+        const target = useGame.getState().conn === Conn.Open ? SPLASH.donePct : SPLASH.waitingPct;
+        const step = Math.max(SPLASH.minStepPct, (target - current) * SPLASH.easeFactor);
+        return Math.min(target, current + step);
       });
-    }, 55);
-    return () => clearInterval(id);
+    }, SPLASH.tickMs);
+    return () => window.clearInterval(timer);
   }, []);
 
+  // let the finished bar be seen for a beat before the world appears
   useEffect(() => {
-    if (conn !== "open") return;
-    const t = setTimeout(() => useGame.getState().set({ booted: true }), 650);
-    return () => clearTimeout(t);
+    if (conn !== Conn.Open) return;
+    const timer = window.setTimeout(
+      () => useGame.getState().set({ booted: true }),
+      SPLASH.handoffMs,
+    );
+    return () => window.clearTimeout(timer);
   }, [conn]);
 
   return (
@@ -44,7 +63,7 @@ function SplashScreen() {
 
         <div className="progress">
           <div className="progress__track">
-            <div className="progress__bar" style={{ width: `${pct}%` }} />
+            <div className="progress__bar" style={{ width: `${clamp(pct, 0, 100)}%` }} />
           </div>
           <span className="progress__pct">{Math.round(pct)}%</span>
         </div>
@@ -63,7 +82,7 @@ function ErrorScreen() {
     <div className="screen">
       <div className="center-col">
         <div className="panel text-center">
-          <p className="error-text mb-4">{error ?? "เกิดข้อผิดพลาด"}</p>
+          <p className="error-text mb-4">{error ?? CONNECT_ERROR.unknown}</p>
           <button className="btn btn--gold" onClick={leaveRoom}>
             กลับหน้าเข้าห้อง
           </button>
@@ -71,17 +90,4 @@ function ErrorScreen() {
       </div>
     </div>
   );
-}
-
-export function App() {
-  const conn = useGame((s) => s.conn);
-  const booted = useGame((s) => s.booted);
-
-  if (conn === "idle") return <JoinScreen />;
-  if (conn === "error") return <ErrorScreen />;
-  if (conn === "connecting" || !booted) return <SplashScreen />;
-
-  // conn === "open" && booted — one live 3D world drives every phase
-  // (lobby plaza · match · results), for both players and the Host.
-  return <GameScreen />;
 }

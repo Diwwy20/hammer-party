@@ -1,23 +1,65 @@
+import { BackId, EventKind, FaceId, HammerKind, HatId, PrankKind } from "./enums";
+
 /**
- * Single source of truth for game numbers — imported by BOTH client and server.
- * Tuning happens here so damage/HP/tick never drift between the two.
- * (GDD v0.1: HP=600, dmg 2/5/20, tick 20Hz. Numbers are placeholders to tune in Phase 02.)
+ * Single source of truth for the game's TUNABLE NUMBERS — imported by BOTH client
+ * and server, so damage/HP/tick can never drift between the two.
+ *
+ * What belongs where:
+ *   - here .............. simulation values (HP, damage, speeds, radii, timings) + cosmetic catalogs
+ *   - `enums.ts` ........ closed value sets that get compared (phase, hammer, pickup, …)
+ *   - `stages.ts` ....... per-stage layout data
+ *   - client `config/` .. presentation-only tuning (camera, FX durations, palettes)
+ *
+ * Anything compared or measured in game logic must be named here — never inlined.
  */
+
+// ── Server loop / session ───────────────────────────────────────────────────
 
 /** Server simulation frequency (Hz). */
 export const TICK_RATE = 20;
 
-/** Everyone starts here — high HP so a match lasts 15–20 min. */
-export const HP_MAX = 600;
+/** Derived: one simulation step in ms. */
+export const TICK_MS = 1000 / TICK_RATE;
+
+/** Default port for the Colyseus WS transport (server binds it, client dials it). */
+export const DEFAULT_SERVER_PORT = 2567;
+
+/** Colyseus room name used by both sides for join/define. */
+export const ROOM_NAME = "game";
 
 /** Room cap (25 players + 1 invisible host who isn't counted). */
 export const MAX_PLAYERS = 25;
 
-/** Hard match cap; the shrinking zone forces an end before this. */
+/** A player whose connection drops mid-match keeps their seat this long for a reconnect. */
+export const RECONNECT_SECONDS = 20;
+
+// ── Match shape ─────────────────────────────────────────────────────────────
+
+/** Everyone starts here — high HP so a match lasts 15–20 min. */
+export const HP_MAX = 600;
+
+/** Hard match cap; the shrinking zone should always force an end well before this. */
 export const MATCH_MAX_MINUTES = 20;
 
-/** Colosseum arena radius (meters) at match start, before the zone shrinks. */
+/** Derived: the hard cap in ms (the sim's failsafe end-of-match trigger). */
+export const MATCH_MAX_MS = MATCH_MAX_MINUTES * 60_000;
+
+/** Host can start once at least this many players have joined (bump for real play). */
+export const MIN_PLAYERS_TO_START = 1;
+
+/** Below this many starters a match can't be "won" — stops a solo test ending instantly. */
+export const MIN_PLAYERS_FOR_WIN = 2;
+
+// ── World / movement ────────────────────────────────────────────────────────
+
+/** Default arena radius (m) at match start, before the zone shrinks. See `stages.ts`. */
 export const ARENA_RADIUS = 24;
+
+/** Players spawn on a ring at this fraction of the stage radius. */
+export const SPAWN_RADIUS_RATIO = 0.65;
+
+/** Default spawn ring radius (m) for the default stage. */
+export const SPAWN_RADIUS = ARENA_RADIUS * SPAWN_RADIUS_RATIO;
 
 /**
  * Waiting-room plaza radius (m). Before the Host starts, everyone gathers here and
@@ -26,14 +68,14 @@ export const ARENA_RADIUS = 24;
  */
 export const LOBBY_RADIUS = 16;
 
+/** Plaza spawn ring (m) — half way out, so arrivals land near the middle, not the wall. */
+export const LOBBY_SPAWN_RADIUS = LOBBY_RADIUS * 0.5;
+
 /** Walk speed (m/s), applied by the authoritative server. */
 export const MOVE_SPEED = 5;
 
 /** Capsule radius (m) — used for arena-edge clamping and spawn spacing. */
 export const PLAYER_RADIUS = 0.5;
-
-/** Players spawn on a ring at this radius when the match starts. */
-export const SPAWN_RADIUS = ARENA_RADIUS * 0.65;
 
 /** Client renders OTHER players this far in the past for smooth interpolation. */
 export const INTERP_DELAY_MS = 100;
@@ -41,11 +83,10 @@ export const INTERP_DELAY_MS = 100;
 /** How often the client samples the joystick and sends input up. */
 export const INPUT_SEND_HZ = 20;
 
-/** The 3 normal hammers + `golden` (a random-event power weapon, ~one-shot). */
-export type HammerKind = "fast" | "mid" | "heavy" | "golden";
+// ── Combat ──────────────────────────────────────────────────────────────────
 
 /**
- * Hammers. Everyone starts on `mid`; `fast`/`heavy` spawn as map pickups; `golden`
+ * Hammers. Everyone starts on `Mid`; `Fast`/`Heavy` spawn as map pickups; `Golden`
  * only appears via the Golden Hammer event. What matters is the RATIO, not the
  * exact numbers (GDD).
  */
@@ -65,35 +106,83 @@ export const HAMMERS: Record<
     readonly stunMs: number;
   }
 > = {
-  fast: { label: "ฆ้อนเร็ว", dmg: 2, cooldownMs: 220, knockback: 4, reach: 2.0, arcDeg: 55, stunMs: 0 },
-  mid: { label: "ฆ้อนกลาง", dmg: 5, cooldownMs: 420, knockback: 7, reach: 2.3, arcDeg: 65, stunMs: 0 },
-  heavy: { label: "ฆ้อนแรง", dmg: 20, cooldownMs: 900, knockback: 14, reach: 2.7, arcDeg: 80, stunMs: 550 },
-  golden: { label: "ฆ้อนทองคำ", dmg: 250, cooldownMs: 650, knockback: 22, reach: 3.2, arcDeg: 100, stunMs: 350 },
+  [HammerKind.Fast]: {
+    label: "ฆ้อนเร็ว",
+    dmg: 2,
+    cooldownMs: 220,
+    knockback: 4,
+    reach: 2.0,
+    arcDeg: 55,
+    stunMs: 0,
+  },
+  [HammerKind.Mid]: {
+    label: "ฆ้อนกลาง",
+    dmg: 5,
+    cooldownMs: 420,
+    knockback: 7,
+    reach: 2.3,
+    arcDeg: 65,
+    stunMs: 0,
+  },
+  [HammerKind.Heavy]: {
+    label: "ฆ้อนแรง",
+    dmg: 20,
+    cooldownMs: 900,
+    knockback: 14,
+    reach: 2.7,
+    arcDeg: 80,
+    stunMs: 550,
+  },
+  [HammerKind.Golden]: {
+    label: "ฆ้อนทองคำ",
+    dmg: 250,
+    cooldownMs: 650,
+    knockback: 22,
+    reach: 3.2,
+    arcDeg: 100,
+    stunMs: 350,
+  },
 };
 
-export const DEFAULT_HAMMER: HammerKind = "mid";
+export const DEFAULT_HAMMER: HammerKind = HammerKind.Mid;
 
 /** Knockback velocity decays by this factor per second (exponential). Higher = stops sooner. */
 export const KNOCKBACK_DECAY = 6;
 
-/** A player whose connection drops mid-match keeps their seat this long for a reconnect. */
-export const RECONNECT_SECONDS = 20;
+/** Knockback below this speed (m/s) is snapped to zero — stops endless micro-drift. */
+export const KNOCKBACK_STOP_SPEED = 0.05;
 
-// ── Pickups / hazards (Phase 03) ────────────────────────────────────────────
+/** Two capsules closer than this (m) have no usable hit direction — skip the swing. */
+export const HIT_MIN_DISTANCE = 1e-4;
+
+/** A player can only take one wall-slam per this window (ms) — debounces edge grinding. */
+export const WALL_SLAM_COOLDOWN_MS = 400;
+
+// ── Pickups / events ────────────────────────────────────────────────────────
 
 /** Walk within this distance (m) of a pickup to collect it. */
 export const PICKUP_RADIUS = 1.2;
 
 /** A collected weapon pickup respawns after this long (ms). Event orbs don't respawn. */
-export const WEAPON_RESPAWN_MS = 12000;
+export const WEAPON_RESPAWN_MS = 12_000;
 
-/** How long an event banner ("⚡ ค้อนทองคำ!") stays on screen (ms). */
-export const EVENT_BANNER_MS = 4000;
+/** How long an event banner stays on screen (ms). */
+export const EVENT_BANNER_MS = 4_000;
 
 /** HP restored by walking over a heal orb (Heal event). */
 export const HEAL_ORB_HP = 200;
 
-// ── Dead-player pranks (Phase 04) ───────────────────────────────────────────
+/** Heal orbs spawn on a ring of this many, at this radius (m) from the centre. */
+export const HEAL_ORB_COUNT = 4;
+export const HEAL_ORB_RING_RADIUS = 8;
+
+/** Each event also fires automatically at this point into the match (ms). */
+export const AUTO_EVENT_AT_MS: Record<EventKind, number> = {
+  [EventKind.Golden]: 90_000,
+  [EventKind.Heal]: 150_000,
+};
+
+// ── Dead-player pranks ──────────────────────────────────────────────────────
 
 /**
  * Spectators (dead players) can lob a prank at a random survivor. Pranks HARASS
@@ -101,21 +190,20 @@ export const HEAL_ORB_HP = 200;
  */
 export const PRANK = {
   /** min gap between a spectator's prank throws (ms) */
-  cooldownMs: 3000,
-  banana: { stunMs: 700, knockback: 5 },
-  bomb: { dmg: 30, stunMs: 350, knockback: 12 },
+  cooldownMs: 3_000,
+  /** a bombed player never drops below this HP — a prank can't take the kill */
+  minHpAfterBomb: 1,
+  [PrankKind.Banana]: { stunMs: 700, knockback: 5 },
+  [PrankKind.Bomb]: { dmg: 30, stunMs: 350, knockback: 12 },
 } as const;
 
-export type PrankKind = "banana" | "bomb";
+// ── Player names ────────────────────────────────────────────────────────────
 
-/** Colyseus room name used by both sides for joinOrCreate/define. */
-export const ROOM_NAME = "game";
+/** Display names are clamped to this (input maxLength + server-side truncation). */
+export const MAX_NAME_LENGTH = 16;
 
-/**
- * Game phase. Declared here (not in schema.ts) so the CLIENT can import the type
- * from "@hammer/shared" without pulling in @colyseus/schema. schema.ts re-uses it.
- */
-export type GamePhase = "lobby" | "playing" | "ended";
+/** Shown when a name is empty or entirely masked by the profanity filter. */
+export const FALLBACK_PLAYER_NAME = "ผู้เล่น";
 
 // ── Lobby / room code ───────────────────────────────────────────────────────
 
@@ -125,6 +213,9 @@ export const ROOM_CODE_LENGTH = 4;
 /** No 0/O/1/I to avoid misreads when someone types the code off the big screen. */
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
+/** Everything a typed/scanned room code may NOT contain — used to sanitise the join field. */
+export const ROOM_CODE_STRIP_PATTERN = /[^A-Z0-9]/g;
+
 /** Generate a room code. The Host makes one and passes it as a matchmaking filter. */
 export function randomRoomCode(len: number = ROOM_CODE_LENGTH): string {
   let out = "";
@@ -133,9 +224,6 @@ export function randomRoomCode(len: number = ROOM_CODE_LENGTH): string {
   }
   return out;
 }
-
-/** Host can start once at least this many players have joined (bump for real play). */
-export const MIN_PLAYERS_TO_START = 1;
 
 // ── Cosmetics (no stat effect) ──────────────────────────────────────────────
 
@@ -158,33 +246,36 @@ export interface CosmeticOption {
   readonly icon: string;
 }
 
+/** Index 0 of every catalog is always the "wearing nothing" entry (`COSMETIC_NONE_ID`). */
+export const COSMETIC_NONE_INDEX = 0;
+
 /** Cosmetic catalogs (index 0 is always "none"). Rendered procedurally — see three/cosmetics.tsx. */
 export const HATS: readonly CosmeticOption[] = [
-  { id: "none", label: "ไม่ใส่", icon: "🚫" },
-  { id: "cap", label: "แก๊ป", icon: "🧢" },
-  { id: "crown", label: "มงกุฎ", icon: "👑" },
-  { id: "horns", label: "เขาสัตว์", icon: "🐮" },
-  { id: "tophat", label: "หมวกสูง", icon: "🎩" },
-  { id: "party", label: "ปาร์ตี้", icon: "🎉" },
+  { id: HatId.None, label: "ไม่ใส่", icon: "🚫" },
+  { id: HatId.Cap, label: "แก๊ป", icon: "🧢" },
+  { id: HatId.Crown, label: "มงกุฎ", icon: "👑" },
+  { id: HatId.Horns, label: "เขาสัตว์", icon: "🐮" },
+  { id: HatId.TopHat, label: "หมวกสูง", icon: "🎩" },
+  { id: HatId.Party, label: "ปาร์ตี้", icon: "🎉" },
 ];
 
 export const FACES: readonly CosmeticOption[] = [
-  { id: "none", label: "ไม่ใส่", icon: "🚫" },
-  { id: "shades", label: "แว่นกันแดด", icon: "😎" },
-  { id: "visor", label: "ไวเซอร์", icon: "🤖" },
-  { id: "nerd", label: "แว่นกลม", icon: "🤓" },
-  { id: "eyepatch", label: "ผ้าปิดตา", icon: "🩹" },
+  { id: FaceId.None, label: "ไม่ใส่", icon: "🚫" },
+  { id: FaceId.Shades, label: "แว่นกันแดด", icon: "😎" },
+  { id: FaceId.Visor, label: "ไวเซอร์", icon: "🤖" },
+  { id: FaceId.Nerd, label: "แว่นกลม", icon: "🤓" },
+  { id: FaceId.Eyepatch, label: "ผ้าปิดตา", icon: "🩹" },
 ];
 
 export const BACKS: readonly CosmeticOption[] = [
-  { id: "none", label: "ไม่มี", icon: "🚫" },
-  { id: "cape", label: "ผ้าคลุม", icon: "🦸" },
-  { id: "backpack", label: "เป้", icon: "🎒" },
-  { id: "wings", label: "ปีก", icon: "🦋" },
-  { id: "jetpack", label: "เจ็ตแพ็ก", icon: "🚀" },
+  { id: BackId.None, label: "ไม่มี", icon: "🚫" },
+  { id: BackId.Cape, label: "ผ้าคลุม", icon: "🦸" },
+  { id: BackId.Backpack, label: "เป้", icon: "🎒" },
+  { id: BackId.Wings, label: "ปีก", icon: "🦋" },
+  { id: BackId.Jetpack, label: "เจ็ตแพ็ก", icon: "🚀" },
 ];
 
 export const DEFAULT_COLOR_INDEX = 1; // orange
-export const DEFAULT_HAT_INDEX = 0; // none
-export const DEFAULT_FACE_INDEX = 0; // none
-export const DEFAULT_BACK_INDEX = 0; // none
+export const DEFAULT_HAT_INDEX = COSMETIC_NONE_INDEX;
+export const DEFAULT_FACE_INDEX = COSMETIC_NONE_INDEX;
+export const DEFAULT_BACK_INDEX = COSMETIC_NONE_INDEX;

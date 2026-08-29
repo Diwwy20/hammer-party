@@ -1,5 +1,11 @@
 import { MAX_PLAYERS } from "@hammer/shared";
-import { useGame } from "../store";
+import {
+  selectHasHost,
+  selectMeReady,
+  selectPlayerCount,
+  selectReadyCount,
+  useGame,
+} from "../store";
 import { sendReady, leaveRoom } from "../net/session";
 
 /**
@@ -9,10 +15,11 @@ import { sendReady, leaveRoom } from "../net/session";
  */
 export function LobbyBar({ onCustomize }: { onCustomize: () => void }) {
   const code = useGame((s) => s.code);
-  const count = useGame((s) => Object.keys(s.players).length);
-  const readyCount = useGame((s) => Object.values(s.players).filter((p) => p.ready).length);
-  const hostHere = useGame((s) => !!s.hostSessionId);
-  const amReady = useGame((s) => (s.sessionId ? (s.players[s.sessionId]?.ready ?? false) : false));
+
+  const count = useGame(selectPlayerCount);
+  const readyCount = useGame(selectReadyCount);
+  const hostHere = useGame(selectHasHost);
+  const amReady = useGame(selectMeReady);
 
   return (
     <>
@@ -40,7 +47,9 @@ export function LobbyBar({ onCustomize }: { onCustomize: () => void }) {
             <>รอ Host เข้าห้อง…</>
           )}
         </p>
-        <p className="lobby-hint">แตะจอย + ปุ่ม 🔨 เพื่อเดินและหยอกเพื่อน (ไม่เสียเลือด) · บนคอมใช้ WASD + Space</p>
+        <p className="lobby-hint">
+          แตะจอย + ปุ่ม 🔨 เพื่อเดินและหยอกเพื่อน (ไม่เสียเลือด) · บนคอมใช้ WASD + Space
+        </p>
         <div className="lobby-actions">
           <button className="pill pill--action" onClick={onCustomize}>
             👕 แต่งตัว
