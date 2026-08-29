@@ -24,6 +24,7 @@ import {
 } from "./context";
 import { applyCosmetic } from "./cosmetics";
 import { clearExpiredBanner, fireDueAutoEvents, fireEvent } from "./events";
+import { clearHazards, stepHazards } from "./hazards";
 import { stepLobby, stepMatch } from "./movement";
 import { spawnStageWeapons } from "./pickups";
 import { collectStatRows, computeAwards, computeStandings } from "./results";
@@ -193,6 +194,7 @@ export class MatchSimulation {
     ctx.state.standingsJson = "";
     ctx.state.elapsedMs = 0;
 
+    clearHazards(ctx);
     spawnStageWeapons(ctx);
     ctx.match.aliveAtStart = spawnForMatch(ctx);
 
@@ -213,6 +215,7 @@ export class MatchSimulation {
     ctx.state.awardsJson = "";
     ctx.state.standingsJson = "";
     ctx.state.pickups.clear();
+    clearHazards(ctx);
     ctx.inputs.clear();
 
     ctx.state.players.forEach((player, id) => {
@@ -238,6 +241,7 @@ export class MatchSimulation {
     if (this.ctx.state.phase !== GamePhase.Playing) return;
 
     stepMatch(this.ctx, deltaMs);
+    stepHazards(this.ctx);
     fireDueAutoEvents(this.ctx);
     clearExpiredBanner(this.ctx);
 

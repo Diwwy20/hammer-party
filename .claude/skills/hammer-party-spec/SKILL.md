@@ -52,20 +52,50 @@ HP · knockback) is reused across all stages; a new stage only changes **layout,
 hazards, theme**. Model a stage as config `{ radius, hazards, spawns, theme }` (Phase 03).
 UI copy stays generic — never bake a specific arena name into the interface.
 
-Hazards: hazard walls/fire (wall-slam = extra dmg + stun), shrinking floor (edges
-become lava/electric, squeezes to center, accelerates late), traps.
+Hazards: hazard walls (wall-slam = extra dmg + stun), shrinking floor (edges become
+lava/electric, squeezes to center, accelerates late), meteor strikes.
+
+**Solid cover** (`StageConfig.obstacles`): pillars and crates, each a collision
+CIRCLE both sides push players out of (`pushOutOfObstacles` in `shared/stages.ts`).
+Cover is gameplay — the server clamps and the client's prediction runs the identical
+function, so what you can hide behind is exactly what you see.
+
+**Dressing** (`StageConfig.decor`): counts only — stands, columns, banners, torches,
+clouds. Layout data lives with the stage; the COLOURS live on the client
+(`config/theme.ts`), so a stage redresses itself by changing numbers.
 
 ## Random events (keep few — played monthly; only high-value)
 
-Shrinking floor (core), Golden Hammer (1 spawns center, ~one-shot, everyone fights),
-heal/armor orb, speed buff, meteor shower, low gravity (comedic), comeback buff for
-the lowest-HP player. Host can trigger events; dead players can vote.
+Shipped (`EventKind`, each also fires on a timer — `AUTO_EVENT_AT_MS`):
+
+| Event      | What it does                                                                                                                                                  |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Golden** | one ~one-shot hammer spawns dead centre; the whole room fights over it                                                                                        |
+| **Heal**   | a ring of heal orbs appears                                                                                                                                   |
+| **Meteor** | a storm of TELEGRAPHED strikes — a marker sits on the floor `METEOR.warnMs` before impact, then AoE damage + knockback with linear falloff to the rim         |
+| **Rain**   | the floor goes slick for `RAIN.durationMs`: knockback decay is scaled by `RAIN.slipFactor`, so one hit slides you much further (and possibly out of the zone) |
+
+Meteor + rain run over TIME, so they are advanced tick-by-tick in `server/game/hazards.ts`
+rather than being fire-and-forget like the pickup events. Every strike is telegraphed
+on purpose: getting hit must always be a decision you made.
+
+Ideas not built: speed buff, low gravity, comeback buff for the lowest-HP player.
+Host can trigger any event by hand.
 
 ## Roles
 
 - **Player**: cosmetic-only customization (no stat effect) — for photos & finding yourself.
-- **Host (invisible)**: flies, free spectator cam on the big screen. Sets HP/time/map, kicks, triggers events, presses Start. Not counted as a player.
-- **Dead player**: enters Spectator — watches survivors, throws prank items (banana=slip, small bomb), cheers, votes. Nobody sits idle.
+- **Host (invisible)**: the big screen. Two cameras: a free orbit cam over the whole
+  arena, or a chase cam locked to any LIVING player (`spectateId`, local to that screen —
+  never sent anywhere). Ghosts are deliberately not offered: the show is the fight.
+  Picks the stage, triggers events, presses Start. Not counted as a player.
+- **Dead player → a GHOST, still in the world.** They keep their stick and drift around
+  the arena (`GHOST.speedFactor`, may wander `GHOST.wanderMarginM` past the wall). The
+  LIVING cannot see them at all; only the Host and other ghosts can. They have no hammer,
+  take no zone damage and pass through cover. What they can do is lob pranks — at the
+  survivor they are floating NEAREST to, which is what makes ghost movement worth doing —
+  on a `PRANK.cooldownMs` gate, floored at `PRANK.minHpAfterBomb` so a spectator can
+  harass but never take a kill. Nobody sits idle.
 - **Results**: final standings (winner-first) + funny awards — Most Kills · First Blood · Longest Survivor ·
   Pacifist · Most Wall-slams. Per-match only, **not persisted** (the Host leaves it up on the big screen;
   there's no monthly leaderboard). The server decides WHO won each award (`AwardKind` + a number); the client
@@ -75,6 +105,6 @@ the lowest-HP player. Host can trigger events; dead players can vote.
 
 Scan QR / enter code → **Splash (loading)** → **Lobby = a walkable 3D plaza** (walk + bonk with no HP loss, dress up, ready-up, wait for Host)
 → Host starts → fight, floor shrinks → last one standing → Results.
-**Dead players never leave** — they switch to spectate + prank mode.
+**Dead players never leave** — they become ghosts (see Roles) and keep playing their own game.
 
 Full status & roadmap: [docs/hammer-party-status.pdf](../../../docs/hammer-party-status.pdf).

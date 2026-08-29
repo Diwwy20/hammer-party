@@ -151,9 +151,32 @@ export function applyEnvironmentDamage(
   return true;
 }
 
+/** The living player closest to `from`, or null when nobody is left standing. */
+function nearestSurvivor(
+  ctx: SimContext,
+  from: { x: number; z: number },
+): { id: string; player: Player } | null {
+  let best: { id: string; player: Player } | null = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+
+  ctx.state.players.forEach((player, id) => {
+    if (!player.alive) return;
+    const distance = Math.hypot(player.x - from.x, player.z - from.z);
+    if (distance >= bestDistance) return;
+    bestDistance = distance;
+    best = { id, player };
+  });
+
+  return best;
+}
+
 /**
- * A dead player lobs a prank at a random survivor. Harasses; never eliminates —
- * bomb damage is floored at `PRANK.minHpAfterBomb` so a spectator can't take a kill.
+ * A dead player lobs a prank at whoever they are floating nearest to. Harasses;
+ * never eliminates — bomb damage is floored at `PRANK.minHpAfterBomb` so a
+ * spectator can't take a kill.
+ *
+ * Targeting the NEAREST survivor (rather than a random one) is what makes ghost
+ * movement worth doing: to bully someone in particular, go and hover over them.
  */
 export function resolvePrank(ctx: SimContext, senderId: string, kind: PrankKind): void {
   if (ctx.state.phase !== GamePhase.Playing) return;
@@ -165,16 +188,11 @@ export function resolvePrank(ctx: SimContext, senderId: string, kind: PrankKind)
   const now = Date.now();
   if (now - senderCombat.lastPrankAt < PRANK.cooldownMs) return;
 
-  const survivors: string[] = [];
-  ctx.state.players.forEach((player, id) => {
-    if (player.alive) survivors.push(id);
-  });
-  if (survivors.length === 0) return;
+  const victim = nearestSurvivor(ctx, sender);
+  if (!victim) return;
   senderCombat.lastPrankAt = now;
 
-  const targetId = survivors[Math.floor(Math.random() * survivors.length)];
-  const target = ctx.state.players.get(targetId);
-  if (!target) return;
+  const { id: targetId, player: target } = victim;
   const targetCombat = ctx.combat.get(targetId);
 
   const angle = Math.random() * TAU;

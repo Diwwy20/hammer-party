@@ -178,9 +178,63 @@ export const HEAL_ORB_RING_RADIUS = 8;
 
 /** Each event also fires automatically at this point into the match (ms). */
 export const AUTO_EVENT_AT_MS: Record<EventKind, number> = {
+  [EventKind.Meteor]: 60_000,
   [EventKind.Golden]: 90_000,
   [EventKind.Heal]: 150_000,
+  [EventKind.Rain]: 200_000,
 };
+
+// ── Weather + hazards ───────────────────────────────────────────────────────
+
+/**
+ * The meteor storm. Every strike is TELEGRAPHED: a marker sits on the floor for
+ * `warnMs` before it lands, so getting hit is always a decision you made, never
+ * something that happened to you.
+ */
+export const METEOR = {
+  /** strikes in one storm */
+  count: 14,
+  /** gap between strikes (ms) */
+  intervalMs: 850,
+  /** how long the floor marker shows before impact (ms) */
+  warnMs: 1_400,
+  /** blast radius (m) — damage falls off linearly to zero at the edge */
+  blastRadius: 3.4,
+  /** HP taken at the dead centre of the blast */
+  dmg: 90,
+  /** knockback (m/s) imparted at the centre */
+  knockback: 18,
+  /** how long a direct hit freezes you (ms) */
+  stunMs: 320,
+  /** strikes land within this fraction of the current safe radius */
+  spreadRatio: 0.92,
+  /** how long the scorch mark lingers after impact (ms) */
+  scorchMs: 900,
+} as const;
+
+/**
+ * Rain. The floor goes slick, so knockback decays far slower and a good hit sends
+ * someone sliding across the arena (and possibly out of the zone).
+ */
+export const RAIN = {
+  /** how long one downpour lasts (ms) */
+  durationMs: 45_000,
+  /** knockback decay is multiplied by this while it rains — lower = more sliding */
+  slipFactor: 0.34,
+} as const;
+
+// ── Ghosts (dead players) ───────────────────────────────────────────────────
+
+/**
+ * Death is not a spectator seat: you stay in the world as a ghost. The living can't
+ * see you, you can't be hit, and all you can do is drift about and lob pranks.
+ */
+export const GHOST = {
+  /** walk-speed multiplier — a ghost drifts a bit quicker than it walked */
+  speedFactor: 1.4,
+  /** how far past the arena wall a ghost may drift (m) */
+  wanderMarginM: 5,
+} as const;
 
 // ── Dead-player pranks ──────────────────────────────────────────────────────
 

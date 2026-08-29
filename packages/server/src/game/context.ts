@@ -67,6 +67,16 @@ export function createCombatState(): CombatState {
   };
 }
 
+/** One queued meteor strike — the schedule behind a synced `Hazard`. */
+export interface MeteorRecord {
+  /** `elapsedMs` at which the warning becomes a crater */
+  impactAtMs: number;
+  /** `elapsedMs` at which the crater is swept up */
+  clearAtMs: number;
+  /** true once the damage has been dealt (an impact resolves exactly once) */
+  landed: boolean;
+}
+
 /** Bookkeeping that lives for exactly one match and is rebuilt on every start. */
 export interface MatchBookkeeping {
   /** how many players were alive at the starting bell (a win needs a real field) */
@@ -81,6 +91,16 @@ export interface MatchBookkeeping {
   pickupRespawnAt: Map<string, number>;
   /** monotonic counter for event-pickup ids */
   eventPickupSeq: number;
+  /** monotonic counter for hazard ids */
+  hazardSeq: number;
+  /** meteors still to be dropped by the running storm */
+  meteorsLeft: number;
+  /** `elapsedMs` at which the next meteor of the storm goes down */
+  nextMeteorAtMs: number;
+  /** hazard id → its impact schedule (the synced `Hazard` carries only what's visible) */
+  meteors: Map<string, MeteorRecord>;
+  /** `elapsedMs` at which the current weather reverts to clear */
+  weatherUntilMs: number;
 }
 
 export function createMatchBookkeeping(): MatchBookkeeping {
@@ -91,6 +111,11 @@ export function createMatchBookkeeping(): MatchBookkeeping {
     bannerUntilMs: 0,
     pickupRespawnAt: new Map(),
     eventPickupSeq: 0,
+    hazardSeq: 0,
+    meteorsLeft: 0,
+    nextMeteorAtMs: 0,
+    meteors: new Map(),
+    weatherUntilMs: 0,
   };
 }
 

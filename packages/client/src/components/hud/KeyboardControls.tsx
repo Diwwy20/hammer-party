@@ -29,9 +29,12 @@ const MOVE_CODES: readonly string[] = [...KEY.Up, ...KEY.Down, ...KEY.Left, ...K
 export function KeyboardControls({
   input,
   sessionId,
+  enableAttack,
 }: {
   input: MutableRefObject<MoveVec>;
   sessionId?: string;
+  /** false for a ghost: they still walk, but they have no hammer to swing. */
+  enableAttack: boolean;
 }) {
   useEffect(() => {
     const held = new Set<string>();
@@ -56,7 +59,7 @@ export function KeyboardControls({
       sendAttack();
     };
     const startSwinging = () => {
-      if (swingTimer) return; // key-repeat, not a new press
+      if (!enableAttack || swingTimer) return; // nothing to swing with, or just key-repeat
       sfx.swing();
       swing();
       swingTimer = window.setInterval(swing, HUD.swingRepeatMs);
@@ -104,7 +107,7 @@ export function KeyboardControls({
       stopSwinging();
       input.current = { ...NO_MOVEMENT };
     };
-  }, [input, sessionId]);
+  }, [input, sessionId, enableAttack]);
 
   return null;
 }

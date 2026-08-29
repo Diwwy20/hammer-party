@@ -134,6 +134,53 @@ Owner-requested (2026-08): a senior-level cleanup, no gameplay redesign. Behavio
   stripped tabs/newlines **before** collapsing whitespace, gluing "Ann<TAB>Lee" into "AnnLee".
 - 📦 `refactor: split server sim + client HUD by responsibility, kill magic values`
 
+## Post-05 presentation + spectator pass ✅
+
+Owner-requested (2026-08): make it look and feel like the party game it is — a cover
+screen, characters worth dressing up, a map worth fighting on, weather events, and
+something real to do after you die.
+
+- **Join flow**: `components/GameCover.tsx` — the mascot with a hammer, drawn as inline
+  SVG (instant, crisp at any size, and it works on a room LAN with no network) and
+  painted from the same swatches as the 3D characters. Shown on the join screen and,
+  bobbing, on the loading splash. Name entry gained a 🎲 suggestion button
+  (`NAME_SUGGESTIONS` in `config/copy.ts`).
+- **Characters**: split into a RIG (`three/Character.tsx`) and a DRIVER
+  (`three/PlayerAvatar.tsx`). Rounded modern-minimal proportions; joints pivot where a
+  joint should be. Animations: distance-driven walk cycle, idle breathing, swing arc +
+  a fading trail, hit squash + impact burst, death poof, ghost float. Every measurement
+  comes from `RIG` in `config/view.ts` so cosmetics follow the body.
+- **Camera → third person in every phase.** The match was first-person, which hid the
+  entire character. Every player cam is now fixed-orientation behind the player, so
+  `toWorld()` collapsed to ONE mapping (its test shrank with it).
+- **Stage**: `StageConfig` gained `obstacles` (solid pillars/crates — collision circles
+  pushed out by `pushOutOfObstacles`, called by BOTH the server step and the client
+  prediction) and `decor` (counts for stands, columns, banners, torches, clouds; the
+  colours stay on the client). The default stage is now a dressed arena.
+- **Events**: `EventKind.Meteor` (a storm of telegraphed strikes — a floor marker for
+  `METEOR.warnMs`, then AoE damage with linear falloff) and `EventKind.Rain` (the floor
+  goes slick: knockback decay scaled by `RAIN.slipFactor`). Both run over time, so they
+  get their own module, `server/game/hazards.ts`, plus a synced `hazards` map, a
+  `weather` field and a `boom` broadcast.
+- **Ghosts**: the dead stay in the world and keep driving (`driftGhost`). The living
+  cannot see them at all; only the Host and other ghosts can. Their prank now targets
+  the survivor they are floating NEAREST to, which is what makes ghost movement worth
+  doing, and the buttons show the cooldown.
+- **Host spectating**: `HostSpectateBar` — a free orbit cam, or a chase cam locked to any
+  living player. The choice is local to that screen and never sent anywhere.
+- **Tests**: `blastFalloff` and `pushOutOfObstacles` are pure, so they got unit tests
+  (118 total); everything socket-shaped went into the e2e smoke, which now runs THREE
+  players (a death has to leave two alive for a ghost to be observable at all) and
+  asserts: cover is solid · rain flips the weather · meteors telegraph then land · a
+  ghost still drifts · a ghost prank lands, respects its cooldown, and takes no kill ·
+  restart clears the storm and the weather.
+- Verified: `pnpm typecheck` + `pnpm lint` + `pnpm test` clean, `pnpm test:e2e` passes,
+  and a live host+player browser run through plaza → match → meteor + rain with no
+  console errors.
+- ⚠️ The richer rig and dressed stage raise the draw-call count — the outstanding
+  25-device load test matters more than it did.
+- 📦 `feat(presentation): cover art, animated characters, dressed arena, weather events, ghosts`
+
 ## 🎉 All phases (00–05 + 3D-lobby refactor + architecture pass) complete — remaining work is event-day hardening (real 25-device load test, dress rehearsal, LAN fallback, reconnection on flaky wifi).
 
 ---

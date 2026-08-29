@@ -29,8 +29,24 @@ Distilled project knowledge lives in `.claude/skills/`. Load only what a task ne
     objects in `shared/src/enums.ts` — **no bare string literals in comparisons**.
   - The server publishes FACTS, the client owns COPY: `GameState.activeEvent` is an `EventKind`, and
     awards are `{kind, name, value}` — no Thai UI strings in the simulation.
-- ⚠️ **Still owed (event-day hardening):** a real ~25-device load test (fps/latency), a full dress
-  rehearsal + LAN fallback, and reconnection tested on genuinely flaky wifi.
+- **Presentation + spectator pass (latest):**
+  - **Join flow:** cover art (`components/GameCover.tsx`, inline SVG so it is instant and offline-safe)
+    on both the join screen and the loading splash; name entry with a 🎲 suggestion button.
+  - **Characters:** a proper animation RIG (`three/Character.tsx`) driven by `three/PlayerAvatar.tsx` —
+    cute rounded proportions, distance-driven walk cycle, idle breathing, swing arc + trail, hit squash,
+    impact burst, death poof. All measurements come from `RIG` in `config/view.ts`.
+  - **Camera is third-person everywhere** (was first-person in a match) — see `ui-conventions`.
+  - **Stage:** the default stage is now a dressed arena — solid pillars/crates you collide with
+    (`StageConfig.obstacles`, `pushOutOfObstacles` shared by server AND client prediction) plus stands,
+    columns, banners and braziers laid out from `StageConfig.decor`.
+  - **Events:** added **Meteor** (telegraphed strikes, AoE with falloff) and **Rain** (slick floor —
+    knockback carries much further). Both are TIMED, so they live in `server/game/hazards.ts`.
+  - **Ghosts:** dead players stay in the world and keep flying; the living cannot see them; they prank
+    the survivor they are floating nearest to, on a cooldown.
+  - **Host spectating:** a free orbit cam, or a chase cam locked to any living player (`HostSpectateBar`).
+- ⚠️ **Still owed (event-day hardening):** a real ~25-device load test (fps/latency) — the richer
+  character rig and dressed stage raise the draw-call count, so this matters more than it did — plus a
+  full dress rehearsal + LAN fallback, and reconnection tested on genuinely flaky wifi.
 - Styling is **Tailwind v4 + shadcn (Base UI)** — see `ui-conventions`.
 
 ## 🔑 Non-negotiable rules
@@ -65,21 +81,24 @@ Distilled project knowledge lives in `.claude/skills/`. Load only what a task ne
 
 ```
 packages/shared/src     enums.ts (closed value sets) · constants.ts (TUNABLE NUMBERS) · math.ts
-                        · stages.ts · messages.ts (wire contract) · schema.ts (subpath export)
+                        · stages.ts (layout + obstacles + decor + pushOutOfObstacles)
+                        · messages.ts (wire contract) · schema.ts (subpath export)
 packages/server/src     index.ts (bootstrap) · config.ts · logger.ts
                         · rooms/GameRoom.ts   — Colyseus adapter: connections + validated routing ONLY
                         · net/validate.ts     — Zod edge schemas + name filter
                         · game/               — the authoritative game, no networking in it:
                             simulation.ts (MatchSimulation) · context.ts (SimContext, server-only state)
-                            combat.ts · movement.ts · pickups.ts · events.ts · spawn.ts
+                            combat.ts · movement.ts (+ ghost drift) · pickups.ts · events.ts
+                            hazards.ts (meteor storm + rain, the TIMED events) · spawn.ts
                             cosmetics.ts · results.ts (pure ranking rules)
 packages/client/src     App.tsx (routing) · store.ts (mirror + selectors) · audio.ts · styles.css
                         · config/{view,theme,copy}.ts   — presentation tuning · palettes · Thai copy
                         · net/{config,client,session,movement}.ts
                         · runtime/{combatFx,localPlayer,input}.ts — per-frame state outside React
-                        · three/{World,Arena,Pickups,PlayerAvatar,useSelfControl,cosmetics,types}
-                        · components/{LobbyBar,CustomizeSheet,Customizer,HostLobbyOverlay}
-                        · components/hud/{Joystick,AttackButton,KeyboardControls,MatchHud,
+                        · three/{World,Arena,Pickups,Hazards,Weather,PlayerAvatar,Character,
+                                 useSelfControl,cosmetics,types}
+                        · components/{GameCover,LobbyBar,CustomizeSheet,Customizer,HostLobbyOverlay}
+                        · components/hud/{Joystick,AttackButton,KeyboardControls,MatchHud,HostSpectateBar,
                                           EventBanner,HostEventBar,PrankBar,ZoneWarning,ResultsOverlay}
                         · screens/{JoinScreen,GameScreen}
 e2e/                    @hammer/e2e — smoke.ts: the end-to-end smoke (outside packages/ on purpose)
@@ -98,6 +117,8 @@ pnpm dev        # server :2567 + client :5180 (parallel)
 ```
 
 - Host screen: `http://localhost:5180/?host` · Player: `http://localhost:5180/?room=<CODE>` (or scan the QR).
+- `.claude/launch.json` starts **only the client** for the in-app browser preview. It must not run
+  `pnpm dev`: the preview harness exports `PORT`, which the Colyseus server would then bind instead of 2567. Run the server yourself with `pnpm dev:server`.
 - **pnpm 11 quirk:** native builds are approved via `onlyBuiltDependencies` (esbuild, msgpackr-extract) in
   `pnpm-workspace.yaml` — needed for vite/tsx to run.
 

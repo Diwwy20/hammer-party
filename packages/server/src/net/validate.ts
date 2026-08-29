@@ -1,10 +1,11 @@
 import { z } from "zod";
 import {
-  EventKind,
+  EVENT_ORDER,
   FALLBACK_PLAYER_NAME,
   MAX_NAME_LENGTH,
   PrankKind,
   STAGE_ORDER,
+  type EventKind,
   type StageId,
 } from "@hammer/shared";
 
@@ -32,9 +33,9 @@ export const cosmeticSchema = z.object({
   backIndex: z.number().int().optional(),
 });
 
-export const eventSchema = z.object({
-  kind: z.enum([EventKind.Golden, EventKind.Heal]),
-});
+/** Only an event this build actually ships can be triggered. (`z.enum` needs a tuple.) */
+const EVENT_KINDS = EVENT_ORDER as unknown as [EventKind, ...EventKind[]];
+export const eventSchema = z.object({ kind: z.enum(EVENT_KINDS) });
 
 export const prankSchema = z.object({
   kind: z.enum([PrankKind.Banana, PrankKind.Bomb]),

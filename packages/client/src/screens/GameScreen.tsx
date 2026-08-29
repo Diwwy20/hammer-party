@@ -13,6 +13,7 @@ import { HostLobbyOverlay } from "../components/HostLobbyOverlay";
 import { AttackButton } from "../components/hud/AttackButton";
 import { EventBanner } from "../components/hud/EventBanner";
 import { HostEventBar } from "../components/hud/HostEventBar";
+import { HostSpectateBar } from "../components/hud/HostSpectateBar";
 import { Joystick } from "../components/hud/Joystick";
 import { KeyboardControls } from "../components/hud/KeyboardControls";
 import { MatchHud } from "../components/hud/MatchHud";
@@ -44,8 +45,10 @@ export function GameScreen() {
   const isPlaying = phase === GamePhase.Playing;
   const isPlaza = phase === GamePhase.Lobby;
   const isPlayer = !isHost;
-  /** you can walk + bonk in the plaza too, not just in a match */
-  const canControl = isPlayer && meAlive && (isPlaying || isPlaza);
+  /** dead players keep walking — as ghosts — so they keep their stick, just not the hammer */
+  const isGhost = isPlayer && !meAlive && isPlaying;
+  const canMove = isPlayer && (isPlaza || isPlaying);
+  const canSwing = canMove && meAlive;
 
   return (
     <div className="fixed inset-0">
@@ -55,13 +58,13 @@ export function GameScreen() {
 
       <ZoneWarning />
 
-      {canControl && (
+      {canMove && (
         <>
           <Joystick input={input} />
-          <AttackButton sessionId={sessionId} />
-          <KeyboardControls input={input} sessionId={sessionId} />
+          <KeyboardControls input={input} sessionId={sessionId} enableAttack={canSwing} />
         </>
       )}
+      {canSwing && <AttackButton sessionId={sessionId} />}
 
       {/* Waiting-room plaza: player HUD + dress-up sheet */}
       {isPlaza && isPlayer && (
@@ -74,8 +77,13 @@ export function GameScreen() {
       {/* Waiting-room plaza: Host big-screen overlay (QR + code + stage + start) */}
       {isPlaza && isHost && <HostLobbyOverlay />}
 
-      {isHost && isPlaying && <HostEventBar />}
-      {isPlayer && !meAlive && isPlaying && <PrankBar />}
+      {isHost && isPlaying && (
+        <>
+          <HostSpectateBar />
+          <HostEventBar />
+        </>
+      )}
+      {isGhost && <PrankBar />}
 
       {!isPlaza && <MatchHud />}
       <EventBanner />

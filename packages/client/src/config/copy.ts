@@ -19,6 +19,14 @@ export const EVENT_COPY: Record<EventKind, { button: string; banner: string }> =
     button: "💚 ออร์บฮีล",
     banner: "💚 ออร์บพลังชีวิตปรากฏ!",
   },
+  [EventKind.Meteor]: {
+    button: "☄️ ฝนอุกกาบาต",
+    banner: "☄️ อุกกาบาตถล่ม! วงแดงบนพื้น = รีบหลบ",
+  },
+  [EventKind.Rain]: {
+    button: "🌧️ ฝนตก",
+    banner: "🌧️ ฝนตกแล้ว! พื้นลื่น โดนตีทีไถลไกลกว่าเดิม",
+  },
 };
 
 /** Buttons a dead player gets, and the emoji that pops over their victim. */
@@ -64,9 +72,49 @@ export const AWARD_COPY: Record<
 /** Splash-screen tips, shown one at random while the room opens. */
 export const SPLASH_TIPS = [
   "ค้อนแรงเหวี่ยงไกล แต่ตีช้า — จังหวะคือทุกอย่าง",
-  "โดนผลักไปชนกำแพงหนาม = เจ็บกว่าเดิม ระวังขอบสนาม",
+  "โดนผลักไปชนกำแพง = เจ็บกว่าเดิม ระวังขอบสนาม",
   "เก็บค้อนในแมพเพื่อเปลี่ยนสไตล์การเล่น",
-  "ตายแล้วยังป่วนต่อได้ — ปาของใส่คนที่ยังรอด",
+  "ตายแล้วไม่จบ — เป็นวิญญาณลอยไปป่วนคนที่ยังรอดได้",
+  "เห็นวงแดงบนพื้นเมื่อไหร่ วิ่งออกทันที อุกกาบาตกำลังลง",
+  "ฝนตกพื้นจะลื่น โดนตีทีเดียวไถลออกนอกวงได้เลย",
+  "หลบหลังเสาไว้ ตอนโดนไล่ตีมันช่วยได้จริง",
+] as const;
+
+/** What a dead player sees and does — they stay in the world as a ghost. */
+export const GHOST_COPY = {
+  title: "👻 คุณเป็นวิญญาณแล้ว",
+  hint: "ลอยไปไหนก็ได้ คนเป็นมองไม่เห็น — ลอยไปใกล้ๆ ใครแล้วปาของใส่ได้เลย",
+  /** shown on a prank button while its cooldown is still running */
+  cooling: "รอ",
+} as const;
+
+/** The Host's spectator controls — following one player around the arena. */
+export const SPECTATE_COPY = {
+  label: "ตามดู",
+  /** the free orbit camera, i.e. following nobody */
+  free: "🎥 มุมกว้าง",
+  prev: "‹",
+  next: "›",
+  hint: "เลือกผู้เล่นเพื่อตามดูแบบประชิด",
+} as const;
+
+/**
+ * Suggested display names for the 🎲 button on the join screen — a nudge for
+ * whoever is standing at the party not wanting to think of one.
+ */
+export const NAME_SUGGESTIONS = [
+  "ค้อนสายฟ้า",
+  "หมีจอมทุบ",
+  "เจ้าชายค้อนทอง",
+  "ตัวป่วนประจำออฟฟิศ",
+  "นักตบมือหนัก",
+  "ยักษ์ใจดี",
+  "กระต่ายถือค้อน",
+  "สายบุญไม่ตีใคร",
+  "ราชาสนามประลอง",
+  "ลูกชิ้นเด้งได้",
+  "ป้าข้างบ้าน",
+  "หัวหน้าทีมทุบ",
 ] as const;
 
 /** Connection failures, mapped from what the server said to what a player reads. */

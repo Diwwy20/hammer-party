@@ -4,6 +4,7 @@ import { Conn, useGame } from "./store";
 import { leaveRoom } from "./net/session";
 import { CONNECT_ERROR, SPLASH_TIPS } from "./config/copy";
 import { SPLASH } from "./config/view";
+import { GameCover } from "./components/GameCover";
 import { JoinScreen } from "./screens/JoinScreen";
 import { GameScreen } from "./screens/GameScreen";
 
@@ -55,8 +56,8 @@ function SplashScreen() {
   return (
     <div className="screen">
       <div className="center-col">
-        <div className="splash__mark">🔨</div>
-        <div>
+        <div className="cover-block">
+          <GameCover bob />
           <h1 className="hero-title">HAMMER PARTY</h1>
           <p className="hero-sub">ทุบให้เหลือคนสุดท้าย!</p>
         </div>

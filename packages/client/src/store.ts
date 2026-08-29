@@ -9,8 +9,11 @@ import {
   DEFAULT_STAGE_ID,
   GamePhase,
   HP_MAX,
+  STAGES,
   StageTheme,
+  WeatherKind,
   type EventKind,
+  type StageConfig,
   type StageId,
 } from "@hammer/shared";
 
@@ -62,6 +65,17 @@ export interface PickupView {
   active: boolean;
 }
 
+/** A live meteor strike mirrored out of room.state — the warning, then the crater. */
+export interface HazardView {
+  /** a `HazardKind` value. */
+  kind: string;
+  /** a `HazardPhase` value. */
+  phase: string;
+  x: number;
+  z: number;
+  radius: number;
+}
+
 /** Just the cosmetic slots — what AvatarBody (three/cosmetics.tsx) needs to draw an avatar. */
 export interface Cosmetic {
   colorIndex: number;
@@ -87,14 +101,23 @@ interface GameStore {
   winnerId: string;
   players: Record<string, PlayerView>;
   pickups: Record<string, PickupView>;
+  hazards: Record<string, HazardView>;
   arenaRadius: number;
   zoneRadius: number;
   stageId: StageId;
   stageTheme: string;
   /** the event whose banner is up, or "" for none. */
   activeEvent: EventKind | "";
+  /** current weather — drives the rain FX and the sky tint. */
+  weather: WeatherKind;
   awardsJson: string;
   standingsJson: string;
+
+  /**
+   * Who the Host's camera is following, or "" for the free orbit cam. Purely LOCAL:
+   * each screen picks its own view and nothing about it is sent to the server.
+   */
+  spectateId: string;
 
   set: (patch: Partial<GameStore>) => void;
   reset: () => void;
@@ -113,13 +136,16 @@ const initial = {
   winnerId: "",
   players: {} as Record<string, PlayerView>,
   pickups: {} as Record<string, PickupView>,
+  hazards: {} as Record<string, HazardView>,
   arenaRadius: ARENA_RADIUS,
   zoneRadius: ARENA_RADIUS,
   stageId: DEFAULT_STAGE_ID as StageId,
   stageTheme: StageTheme.Colosseum as string,
   activeEvent: "" as EventKind | "",
+  weather: WeatherKind.Clear as WeatherKind,
   awardsJson: "",
   standingsJson: "",
+  spectateId: "",
 };
 
 export const useGame = create<GameStore>((set) => ({
@@ -168,6 +194,29 @@ export const selectPlayerIdsKey = (s: Store): string => Object.keys(s.players).s
 export const selectPickupsKey = (s: Store): string =>
   Object.keys(s.pickups)
     .map((id) => `${id}${s.pickups[id].active ? "1" : "0"}`)
+    .join("|");
+
+/**
+ * Signature of the meteors on the floor: which exist and which have landed. A
+ * hazard never moves, so this only changes when one appears, detonates or is swept
+ * up — three times in its life, not twenty times a second.
+ */
+export const selectHazardsKey = (s: Store): string =>
+  Object.keys(s.hazards)
+    .map((id) => `${id}${s.hazards[id].phase}`)
+    .join("|");
+
+/** The stage layout the current match is being played on (props, spawn ring, zone). */
+export const selectStage = (s: Store): StageConfig => STAGES[s.stageId] ?? STAGES[DEFAULT_STAGE_ID];
+
+/** True while THIS client is a dead player — a ghost, not a spectator in the stands. */
+export const selectIsGhost = (s: Store): boolean => !s.isHost && !!s.sessionId && !selectMeAlive(s);
+
+/** Ids of the players still standing, in a stable order (the Host's POV list). */
+export const selectAliveIdsKey = (s: Store): string =>
+  Object.keys(s.players)
+    .filter((id) => s.players[id].alive)
+    .sort()
     .join("|");
 
 /**

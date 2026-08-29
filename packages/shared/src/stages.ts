@@ -1,5 +1,5 @@
 import { ARENA_RADIUS, SPAWN_RADIUS_RATIO } from "./constants";
-import { HammerKind, StageId, StageTheme, type WeaponKind } from "./enums";
+import { HammerKind, ObstacleKind, StageId, StageTheme, type WeaponKind } from "./enums";
 
 /**
  * A stage is DATA, not code — so future maps (rooftop/forest/factory/spaceship)
@@ -35,6 +35,39 @@ export interface WallSlamConfig {
   minSpeed: number;
 }
 
+/**
+ * A solid prop. Blocks movement on BOTH sides — the server clamps players out of it
+ * and the client's prediction runs the exact same `pushOutOfObstacles`, so cover
+ * never disagrees between what you see and where you actually are.
+ */
+export interface Obstacle {
+  kind: ObstacleKind;
+  x: number;
+  z: number;
+  /** solid radius (m) — nobody's capsule may overlap this circle */
+  radius: number;
+  /** how tall it stands (m). Visual only; there is no vertical movement to block. */
+  height: number;
+}
+
+/**
+ * How dressed the stage is. These are COUNTS and toggles (layout), not colours —
+ * what a banner or a torch actually looks like is the client's business
+ * (`client/src/config/theme.ts`).
+ */
+export interface StageDecor {
+  /** tiered spectator seating ringing the arena */
+  stands: boolean;
+  /** stone columns spaced evenly around the wall */
+  columns: number;
+  /** cloth banners hung between the columns */
+  banners: number;
+  /** flaming braziers just outside the wall */
+  torches: number;
+  /** drifting cloud slabs in the sky (for the floating stages) */
+  clouds: number;
+}
+
 export interface StageConfig {
   id: StageId;
   /** short Thai label for the Host's stage picker (describes the vibe, not a lore name) */
@@ -47,16 +80,44 @@ export interface StageConfig {
   spawnRadius: number;
   zone: ZoneConfig;
   weaponSpawns: WeaponSpawn[];
+  /** solid cover players walk around (gameplay — both sides collide with it) */
+  obstacles: Obstacle[];
+  /** how the stage is dressed (presentation counts; colours live on the client) */
+  decor: StageDecor;
   wallSlam: WallSlamConfig;
 }
+
+/** Shorthand for the two prop shapes, so a layout row stays readable. */
+const pillar = (x: number, z: number): Obstacle => ({
+  kind: ObstacleKind.Pillar,
+  x,
+  z,
+  radius: 1,
+  height: 4.6,
+});
+
+const crate = (x: number, z: number): Obstacle => ({
+  kind: ObstacleKind.Crate,
+  x,
+  z,
+  radius: 0.8,
+  height: 1.3,
+});
+
+/** Below this separation (m) an obstacle has no usable push-out direction. */
+const OBSTACLE_MIN_DISTANCE = 1e-4;
 
 /** One minute in ms — zone timings read far better in minutes. */
 const MINUTE_MS = 60_000;
 
-/** Balanced default — a colosseum-style ring. Values are tuned in playtests. */
+/**
+ * The showcase stage — a dressed arena ringed by stands, columns and braziers, with
+ * four stone pillars for cover and low crates further out. The pillars sit off the
+ * weapon spawns on purpose: you fight AROUND them to reach a hammer.
+ */
 export const COLOSSEUM: StageConfig = {
   id: StageId.Colosseum,
-  label: "สนามมาตรฐาน",
+  label: "สนามประลอง",
   theme: StageTheme.Colosseum,
   radius: ARENA_RADIUS,
   spawnRadius: ARENA_RADIUS * SPAWN_RADIUS_RATIO,
@@ -74,6 +135,17 @@ export const COLOSSEUM: StageConfig = {
     { kind: HammerKind.Fast, x: 12, z: 0 },
     { kind: HammerKind.Fast, x: -12, z: 0 },
   ],
+  obstacles: [
+    pillar(8, 0),
+    pillar(0, 8),
+    pillar(-8, 0),
+    pillar(0, -8),
+    crate(11, 4),
+    crate(-11, -4),
+    crate(4, -11),
+    crate(-4, 11),
+  ],
+  decor: { stands: true, columns: 20, banners: 10, torches: 8, clouds: 0 },
   wallSlam: { dmg: 12, stunMs: 400, minSpeed: 5 },
 };
 
@@ -96,6 +168,8 @@ export const PIT: StageConfig = {
     { kind: HammerKind.Fast, x: 8, z: 0 },
     { kind: HammerKind.Fast, x: -8, z: 0 },
   ],
+  obstacles: [crate(0, 6), crate(0, -6), crate(6, 0), crate(-6, 0)],
+  decor: { stands: false, columns: 12, banners: 6, torches: 6, clouds: 0 },
   wallSlam: { dmg: 18, stunMs: 500, minSpeed: 4.5 },
 };
 
@@ -123,6 +197,8 @@ export const GRAND: StageConfig = {
     { kind: HammerKind.Fast, x: 0, z: 15 },
     { kind: HammerKind.Fast, x: 0, z: -15 },
   ],
+  obstacles: [pillar(11, 11), pillar(-11, -11), pillar(11, -11), pillar(-11, 11)],
+  decor: { stands: false, columns: 0, banners: 8, torches: 0, clouds: 9 },
   wallSlam: { dmg: 10, stunMs: 350, minSpeed: 5.5 },
 };
 
@@ -159,4 +235,43 @@ export function zoneRadiusAt(zone: ZoneConfig, elapsedMs: number, startRadius: n
   const t = (elapsedMs - zone.startMs) / (zone.endMs - zone.startMs);
   const eased = t * t;
   return startRadius + (zone.minRadius - startRadius) * eased;
+}
+
+/**
+ * Push a body out of any obstacle it overlaps.
+ *
+ * Pure on purpose: the server calls it in `stepMatch` and the client calls it in the
+ * prediction loop, so a pillar is in exactly the same place for both. Obstacles are
+ * treated as circles — for chunky low-poly cover that reads perfectly and costs a
+ * hypot per prop, which matters at 25 players × 20Hz.
+ *
+ * A body somehow at a prop's exact centre is nudged along +x rather than dividing by
+ * zero, so it always ends up somewhere legal.
+ */
+export function pushOutOfObstacles(
+  x: number,
+  z: number,
+  bodyRadius: number,
+  obstacles: readonly Obstacle[],
+): { x: number; z: number } {
+  let outX = x;
+  let outZ = z;
+
+  for (const obstacle of obstacles) {
+    const dx = outX - obstacle.x;
+    const dz = outZ - obstacle.z;
+    const minGap = obstacle.radius + bodyRadius;
+    const dist = Math.hypot(dx, dz);
+    if (dist >= minGap) continue;
+
+    if (dist < OBSTACLE_MIN_DISTANCE) {
+      outX = obstacle.x + minGap;
+      outZ = obstacle.z;
+      continue;
+    }
+    outX = obstacle.x + (dx / dist) * minGap;
+    outZ = obstacle.z + (dz / dist) * minGap;
+  }
+
+  return { x: outX, z: outZ };
 }

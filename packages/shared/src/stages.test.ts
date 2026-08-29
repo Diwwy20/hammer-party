@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
+import { PLAYER_RADIUS } from "./constants";
 import { StageId } from "./enums";
+import { TAU, pointOnCircle } from "./math";
 import {
   COLOSSEUM,
   DEFAULT_STAGE_ID,
   STAGES,
   STAGE_ORDER,
   findStage,
+  pushOutOfObstacles,
   zoneRadiusAt,
 } from "./stages";
 
@@ -84,6 +87,72 @@ describe("stage catalog", () => {
         expect(Math.hypot(spawn.x, spawn.z)).toBeLessThan(stage.radius);
       }
       expect(stage.label.length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe("pushOutOfObstacles", () => {
+  const BODY = PLAYER_RADIUS;
+  const PROP = COLOSSEUM.obstacles[0];
+
+  it("leaves a body that is clear of everything exactly where it was", () => {
+    const free = pushOutOfObstacles(0, 0, BODY, COLOSSEUM.obstacles);
+    expect(free).toEqual({ x: 0, z: 0 });
+  });
+
+  it("pushes an overlapping body out to the surface, along the way it came in", () => {
+    // just inside the prop, approached from +x
+    const start = { x: PROP.x + PROP.radius * 0.5, z: PROP.z };
+    const free = pushOutOfObstacles(start.x, start.z, BODY, COLOSSEUM.obstacles);
+
+    expect(Math.hypot(free.x - PROP.x, free.z - PROP.z)).toBeCloseTo(PROP.radius + BODY);
+    expect(free.z).toBeCloseTo(PROP.z); // no sideways teleport
+    expect(free.x).toBeGreaterThan(PROP.x);
+  });
+
+  it("never leaves a body inside any prop, from any approach", () => {
+    for (const stage of Object.values(STAGES)) {
+      for (const obstacle of stage.obstacles) {
+        for (let a = 0; a < TAU; a += TAU / 16) {
+          const [dx, dz] = pointOnCircle(a, obstacle.radius * 0.3);
+          const free = pushOutOfObstacles(
+            obstacle.x + dx,
+            obstacle.z + dz,
+            PLAYER_RADIUS,
+            stage.obstacles,
+          );
+          const gap = Math.hypot(free.x - obstacle.x, free.z - obstacle.z);
+          expect(gap).toBeGreaterThanOrEqual(obstacle.radius + PLAYER_RADIUS - 1e-9);
+        }
+      }
+    }
+  });
+
+  it("shoves a body stuck at a prop's dead centre somewhere legal", () => {
+    const free = pushOutOfObstacles(PROP.x, PROP.z, BODY, [PROP]);
+    expect(Math.hypot(free.x - PROP.x, free.z - PROP.z)).toBeCloseTo(PROP.radius + BODY);
+  });
+});
+
+describe("stage props", () => {
+  it("keeps every weapon spawn reachable — never buried inside cover", () => {
+    for (const id of STAGE_ORDER) {
+      const stage = STAGES[id];
+      for (const spawn of stage.weaponSpawns) {
+        for (const obstacle of stage.obstacles) {
+          const gap = Math.hypot(spawn.x - obstacle.x, spawn.z - obstacle.z);
+          expect(gap).toBeGreaterThan(obstacle.radius + PLAYER_RADIUS);
+        }
+      }
+    }
+  });
+
+  it("keeps every prop inside the wall it belongs to", () => {
+    for (const id of STAGE_ORDER) {
+      const stage = STAGES[id];
+      for (const obstacle of stage.obstacles) {
+        expect(Math.hypot(obstacle.x, obstacle.z) + obstacle.radius).toBeLessThan(stage.radius);
+      }
     }
   });
 });

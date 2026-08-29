@@ -59,6 +59,34 @@
   }
 }
 
+/* the cover mascot's idle float on the loading screen */
+@keyframes cover-bob {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-1deg);
+  }
+  50% {
+    transform: translateY(-10px) rotate(1deg);
+  }
+}
+
+/* the sunburst behind the mascot — slow enough to read as warmth, not motion */
+@keyframes cover-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes cover-twinkle {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
 /* ── Component recipes ──────────────────────────────────────────────────────*/
 @layer components {
   /* shells */
@@ -244,6 +272,40 @@
     paint-order: stroke fill;
   }
 
+  /* ── cover art (join screen + loading screen) ───────────────────────────────*/
+  .cover-block {
+    @apply flex w-full flex-col items-center gap-1;
+  }
+  .cover {
+    @apply w-full;
+    max-width: min(340px, 62vw);
+    /* the art carries the whole screen on a phone, so give it room but never let it
+       push the name field below the fold on a short one */
+    max-height: 34vh;
+    filter: drop-shadow(0 10px 16px rgba(30, 70, 120, 0.22));
+  }
+  .cover--bob {
+    animation: cover-bob 2.4s ease-in-out infinite;
+  }
+  .cover__rays {
+    transform-origin: 130px 120px;
+    animation: cover-spin 38s linear infinite;
+  }
+  .cover__confetti {
+    animation: cover-twinkle 2.8s ease-in-out infinite;
+  }
+
+  /* name field with its dice button alongside */
+  .name-row {
+    @apply flex items-stretch gap-2;
+  }
+  .name-row .input {
+    @apply min-w-0 flex-1;
+  }
+  .name-row__dice {
+    @apply flex-none cursor-pointer px-3;
+  }
+
   /* splash */
   .splash__mark {
     @apply animate-bob text-[60px];
@@ -371,6 +433,36 @@
   }
   .sheet__head {
     @apply mb-1 flex items-center justify-between;
+  }
+
+  /* ── spectating ─────────────────────────────────────────────────────────────*/
+
+  /* Host: the strip of survivors the big-screen camera can lock onto */
+  .spectate-bar {
+    @apply fixed inset-x-0 bottom-24 z-20 flex items-center justify-center gap-2 px-4;
+  }
+  .spectate-bar__label {
+    @apply hidden font-display text-[13px] font-bold text-ink sm:inline;
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.9);
+  }
+  .spectate-bar__list {
+    @apply flex max-w-[54vw] gap-2 overflow-x-auto py-1;
+    scrollbar-width: thin;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* a dead player's prank tools + the line telling them what they can still do */
+  .prank-bar {
+    @apply fixed inset-x-0 bottom-6 z-20 flex flex-col items-center gap-2 px-4;
+  }
+  .prank-bar__hint {
+    @apply max-w-[300px] rounded-full px-3 py-1 text-center text-[11px] leading-snug font-medium text-ink;
+    background: rgba(255, 255, 255, 0.78);
+  }
+  .pill--cooling {
+    @apply text-ink-faint;
+    background: var(--color-surface-2);
+    filter: grayscale(0.4);
   }
 
   /* host big-screen lobby overlay (pinned; the plaza shows behind it) */

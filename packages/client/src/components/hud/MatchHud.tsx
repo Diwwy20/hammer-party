@@ -1,6 +1,7 @@
 import { GamePhase, HAMMERS, HP_MAX, type HammerKind } from "@hammer/shared";
 import { selectAliveCount, selectMeAlive, selectMeHammer, selectMeHp, useGame } from "../../store";
 import { hpColor, hpRatio } from "../../config/theme";
+import { GHOST_COPY } from "../../config/copy";
 
 /**
  * The top-left status box during a match and on the results screen: how many are
@@ -13,6 +14,7 @@ export function MatchHud() {
   const meAlive = useGame(selectMeAlive);
   const meHp = useGame(selectMeHp);
   const meHammer = useGame(selectMeHammer);
+  const watchingName = useGame((s) => (s.spectateId ? (s.players[s.spectateId]?.name ?? "") : ""));
 
   const isPlaying = phase === GamePhase.Playing;
   const isFighting = !isHost && meAlive && isPlaying;
@@ -43,14 +45,14 @@ export function MatchHud() {
         </div>
       )}
 
-      {isSpectating && (
-        <div className="muted mt-1 text-[11px]">
-          ☠️ ตกรอบแล้ว — หมุนดูสนาม + ป่วนคนที่ยังรอดได้!
-        </div>
-      )}
+      {isSpectating && <div className="muted mt-1 text-[11px]">{GHOST_COPY.title}</div>}
 
       {/* "Host" stays in English per the agreed wording — never "เจ้าภาพ". */}
-      {isHost && <div className="muted text-[11px]">มุมมอง Host · ลากเพื่อหมุนกล้อง</div>}
+      {isHost && (
+        <div className="muted text-[11px]">
+          {watchingName ? `มุมมอง Host · ตามดู ${watchingName}` : "มุมมอง Host · ลากเพื่อหมุนกล้อง"}
+        </div>
+      )}
     </div>
   );
 }

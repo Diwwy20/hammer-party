@@ -1,25 +1,30 @@
 import {
+  GHOST,
   KNOCKBACK_DECAY,
   KNOCKBACK_STOP_SPEED,
   LOBBY_RADIUS,
   MOVE_SPEED,
   PLAYER_RADIUS,
+  RAIN,
   WALL_SLAM_COOLDOWN_MS,
   ServerMsg,
+  pushOutOfObstacles,
   zoneRadiusAt,
   type HitEvent,
 } from "@hammer/shared";
 import { NO_SESSION, type Player } from "@hammer/shared/schema";
 import { applyEnvironmentDamage, killPlayer } from "./combat";
+import { isSlippery } from "./hazards";
 import { collectPickupsAt, respawnDueWeapons } from "./pickups";
 import type { CombatState, SimContext } from "./context";
 
 /**
  * The authoritative movement step, in two flavours:
  *   - `stepLobby`  — plaza horseplay: walk + knockback only. No zone, no pickups, no HP.
- *   - `stepMatch`  — the real thing: adds wall-slam, the shrinking zone and pickups.
+ *   - `stepMatch`  — the real thing: adds cover, wall-slam, the shrinking zone and pickups.
  *
  * Both share `integrate()`, so a bonk decays identically in the plaza and the arena.
+ * The dead are stepped too, as ghosts — see `driftGhost`.
  */
 
 /** Where a player ended up this tick, before the wall is applied. */
@@ -83,8 +88,12 @@ function clampToWall(x: number, z: number, maxRadius: number, combat?: CombatSta
   return { x: (x / radius) * maxRadius, z: (z / radius) * maxRadius, hitWall: true };
 }
 
-/** Exponential knockback decay for this tick length. */
-const decayFor = (dt: number) => Math.exp(-KNOCKBACK_DECAY * dt);
+/**
+ * Exponential knockback decay for this tick length. On a rain-slicked floor the
+ * decay is scaled down, so the same hit carries someone much further — that IS the
+ * rain event's gameplay, not a visual.
+ */
+const decayFor = (dt: number, slipFactor = 1) => Math.exp(-KNOCKBACK_DECAY * slipFactor * dt);
 
 /**
  * Plaza step. The lobby is horseplay only: people walk, bonk each other around and
@@ -113,13 +122,16 @@ export function stepMatch(ctx: SimContext, deltaMs: number): void {
   const { stage, state } = ctx;
   const maxRadius = stage.radius - PLAYER_RADIUS;
   const now = Date.now();
-  const decay = decayFor(dt);
+  const decay = decayFor(dt, isSlippery(ctx) ? RAIN.slipFactor : 1);
 
   state.zoneRadius = zoneRadiusAt(stage.zone, state.elapsedMs, stage.radius);
   const safeRadius = state.zoneRadius;
 
   state.players.forEach((player, id) => {
-    if (!player.alive) return;
+    if (!player.alive) {
+      driftGhost(ctx, id, player, dt);
+      return;
+    }
 
     const combat = ctx.combat.get(id);
     const moved = integrate(ctx, id, player, dt, now, decay);
@@ -130,8 +142,10 @@ export function stepMatch(ctx: SimContext, deltaMs: number): void {
       if (registerWallSlam(ctx, id, player, combat, now)) return; // died on the wall
     }
 
-    player.x = clamped.x;
-    player.z = clamped.z;
+    // cover is solid: the client's prediction runs this exact same push-out
+    const free = pushOutOfObstacles(clamped.x, clamped.z, PLAYER_RADIUS, stage.obstacles);
+    player.x = free.x;
+    player.z = free.z;
 
     // outside the safe zone: bleed HP
     if (Math.hypot(player.x, player.z) > safeRadius) {
@@ -184,4 +198,27 @@ function registerWallSlam(
   if (player.hp > 0) return false;
   killPlayer(ctx, id, NO_SESSION);
   return true;
+}
+
+/**
+ * A dead player is not a camera — they stay in the world as a ghost and drift where
+ * they like.
+ *
+ * Ghosts deliberately ignore everything that makes the arena dangerous: no zone
+ * bleed, no pickups, no knockback, no walls to slam into. They also pass straight
+ * through cover, and may wander a little past the arena edge to get a better view of
+ * the fight they are no longer in.
+ */
+function driftGhost(ctx: SimContext, id: string, player: Player, dt: number): void {
+  const input = ctx.inputs.get(id);
+  if (!input || (input.dx === 0 && input.dz === 0)) return;
+
+  const speed = MOVE_SPEED * GHOST.speedFactor;
+  const x = player.x + input.dx * speed * dt;
+  const z = player.z + input.dz * speed * dt;
+
+  const drifted = clampToWall(x, z, ctx.stage.radius + GHOST.wanderMarginM);
+  player.x = drifted.x;
+  player.z = drifted.z;
+  player.dir = Math.atan2(input.dx, input.dz);
 }

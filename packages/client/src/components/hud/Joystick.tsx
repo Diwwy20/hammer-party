@@ -1,7 +1,6 @@
 import { useEffect, useRef, type MutableRefObject } from "react";
 import nipplejs from "nipplejs";
 import { INPUT_SEND_HZ } from "@hammer/shared";
-import { useGame } from "../../store";
 import { sendInput } from "../../net/session";
 import { NO_MOVEMENT, toWorld, type MoveVec } from "../../runtime/input";
 import { JOYSTICK } from "../../config/view";
@@ -38,7 +37,7 @@ export function Joystick({ input }: { input: MutableRefObject<MoveVec> }) {
 
     let lastSent: MoveVec = { ...NO_MOVEMENT };
     const timer = window.setInterval(() => {
-      const { dx, dz } = toWorld(input.current.dx, input.current.dz, useGame.getState().phase);
+      const { dx, dz } = toWorld(input.current.dx, input.current.dz);
       if (dx === lastSent.dx && dz === lastSent.dz) return;
       sendInput(dx, dz);
       lastSent = { dx, dz };

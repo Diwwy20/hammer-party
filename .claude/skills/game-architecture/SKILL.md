@@ -24,6 +24,42 @@ projecting a spectator camera for everyone.
 - **Client interpolation**: render _other_ players ~100 ms in the past (`net/movement.ts`); the local
   player is **predicted** and eased back onto the server position (`three/useSelfControl.ts`).
 
+## What is SYNCED, what is BROADCAST, what is LOCAL
+
+Three tiers, and putting something in the wrong one is the classic bug here:
+
+| Tier                              | For                                                                   | Examples                                                                                                                                                             |
+| --------------------------------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Synced** (`@colyseus/schema`)   | anything clients must AGREE on, and any late joiner must see          | player transforms · hp/alive · pickups · `hazards` (a meteor's warning circle is playable information) · `weather` (rain changes the floor's grip on the SERVER too) |
+| **Broadcast** (`ServerMsg`)       | one-shot FX that must fire on the exact frame, and are worthless late | `swing` · `hit` · `died` · `prank` · `boom`                                                                                                                          |
+| **Local** (never leaves a client) | a view choice, or something derived per-frame                         | the Host's `spectateId` · walk cycles · hit squash · the ghost float · rain particles                                                                                |
+
+A meteor is the clearest case of the first two working together: the warning circle
+is SYNCED (everyone must see the same danger in the same spot for the same length of
+time, and someone joining mid-storm has to see it), while the impact is BROADCAST so
+the flash and the thud land on the frame the damage was actually resolved.
+
+## Cover collision runs the SAME function on both sides
+
+`pushOutOfObstacles` lives in `shared/stages.ts` and is called by `stepMatch` on the
+server AND by the prediction loop on the client. That is the whole trick: if the two
+sides disagree about where a pillar is, the player is constantly snapped back and the
+game feels broken. Obstacles are CIRCLES — cheap (one hypot per prop) and exact enough
+for chunky low-poly cover at 25 players × 20 Hz.
+
+## Camera: third person, fixed orientation, everywhere
+
+Every player camera (plaza · match · ghost) sits behind the player looking toward +z
+and **never rotates with their facing**. Two reasons, both load-bearing:
+
+1. `toWorld()` then has exactly ONE mapping for the whole game, so the stick can never
+   change meaning under the player's thumb.
+2. You can see your own character — the costume, the swing, the hit you just took.
+   A first-person match camera hides everything the animation work exists for.
+
+The Host's "watch this player" cam is the one exception: it DOES swing round with the
+player it follows, because the big screen wants to be inside the fight.
+
 ## ⚠️ Pitfalls — do NOT do these
 
 - ❌ **No full networked physics/ragdoll.** For 25 players it's heavy and crash-prone. Instead:
@@ -68,7 +104,9 @@ server/src/
    ├─ simulation.ts      MatchSimulation — the façade the room drives (roster, intents, lifecycle, step)
    ├─ context.ts         SimContext: schema state + server-only state (CombatState, inputs, stage, per-match)
    ├─ combat.ts          swingImpact (pure cone test) · resolveAttack · killPlayer · resolvePrank
-   ├─ movement.ts        stepLobby / stepMatch — walk + knockback + wall-slam + zone + pickups
+   ├─ movement.ts        stepLobby / stepMatch — walk + cover + knockback + wall-slam + zone
+   │                     + pickups, plus driftGhost (the dead keep moving, unseen and untouchable)
+   ├─ hazards.ts         the TIMED events: the meteor storm's schedule + impacts, the rain window
    ├─ pickups.ts         stage weapons, event drops, collect, respawn timers
    ├─ events.ts          what each event drops + when it auto-fires + banner lifetime
    ├─ spawn.ts           lobby spawn ring + match spawn ring (and the per-match reset)
@@ -92,9 +130,13 @@ client/src/
 ├─ config/               view.ts (tuning) · theme.ts (palettes) · copy.ts (Thai copy)
 ├─ net/                  config.ts · client.ts · session.ts (the only Colyseus caller) · movement.ts (interp buffer)
 ├─ runtime/              per-frame state deliberately OUTSIDE React: combatFx · localPlayer · input
-├─ three/                World · Arena · Pickups · PlayerAvatar · useSelfControl (prediction + camera) · cosmetics
+├─ three/                World · Arena (floor + cover + dressing) · Pickups · Hazards (meteors)
+│                        · Weather (rain) · PlayerAvatar (the animation driver) · Character (the rig)
+│                        · cosmetics · useSelfControl (prediction + camera)
+├─ components/           GameCover (the SVG cover art) · LobbyBar · CustomizeSheet · Customizer
+│                        · HostLobbyOverlay
 ├─ components/hud/       Joystick · AttackButton · KeyboardControls · MatchHud · EventBanner
-│                        · HostEventBar · PrankBar · ZoneWarning · ResultsOverlay
+│                        · HostEventBar · HostSpectateBar · PrankBar · ZoneWarning · ResultsOverlay
 └─ screens/              JoinScreen · GameScreen (composition only — picks which overlays are on screen)
 ```
 

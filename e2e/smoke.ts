@@ -25,9 +25,15 @@ import {
   GamePhase,
   HP_MAX,
   HammerKind,
+  HazardPhase,
   LOBBY_RADIUS,
+  METEOR,
   PIT,
+  PLAYER_RADIUS,
+  PRANK,
+  PrankKind,
   StageId,
+  WeatherKind,
 } from "@hammer/shared";
 
 const SERVER_URL = process.env.SMOKE_SERVER_URL ?? "ws://localhost:2567";
@@ -36,6 +42,8 @@ const SERVER_URL = process.env.SMOKE_SERVER_URL ?? "ws://localhost:2567";
 const HOLD_RANGE_M = 1.6;
 /** a nudge that turns you to face someone without closing the gap */
 const CREEP = 0.02;
+/** how far inside a prop we will forgive: one tick of overshoot before the push-out. */
+const COVER_TOLERANCE_M = 0.05;
 const FIGHT_TIMEOUT_MS = 120_000;
 const SETTLE_MS = 400;
 const TICK_MS = 60;
@@ -62,6 +70,15 @@ interface SmokeCollection<T> {
   values(): Iterable<T>;
 }
 
+/** A live meteor strike as the client sees it: where, how big, and how far along. */
+interface SmokeHazard {
+  kind: string;
+  phase: string;
+  x: number;
+  z: number;
+  radius: number;
+}
+
 interface SmokeState {
   phase: string;
   code: string;
@@ -71,8 +88,10 @@ interface SmokeState {
   winnerId: string;
   standingsJson: string;
   awardsJson: string;
+  weather: string;
   players: SmokeCollection<SmokePlayer>;
   pickups: { size: number };
+  hazards: SmokeCollection<SmokeHazard>;
 }
 
 let failures = 0;
@@ -90,7 +109,10 @@ async function main(): Promise<void> {
   const host = await client.create("game", { name: "HOST", asHost: true, code });
   const ann = await client.joinById(host.roomId, { name: "Ann", code });
   const bob = await client.joinById(host.roomId, { name: "Bob", code });
-  silenceFxWarnings(host, ann, bob);
+  // Cid mostly stands about: with three players a single death still leaves two
+  // alive, which is the only way the ghost half of the game is observable at all
+  const cid = await client.joinById(host.roomId, { name: "Cid", code });
+  silenceFxWarnings(host, ann, bob, cid);
   await sleep(SETTLE_MS);
 
   const state = () => host.state as SmokeState;
@@ -109,11 +131,26 @@ async function main(): Promise<void> {
   };
   const stop = (room: Room) => room.send("input", { seq: Number.MAX_SAFE_INTEGER, dx: 0, dz: 0 });
 
+  /** Send `room` walking toward a fixed point on the floor. */
+  const steerTo = (room: Room, x: number, z: number, seq: number) => {
+    const me = playerOf(room.sessionId);
+    const dx = x - me.x;
+    const dz = z - me.z;
+    const distance = Math.hypot(dx, dz) || 1;
+    room.send("input", { seq, dx: dx / distance, dz: dz / distance });
+  };
+
+  const aliveCount = () => [...state().players.values()].filter((p) => p.alive).length;
+
+  /** total HP still standing — the simplest way to see a prank land on *somebody*. */
+  const healthOfTheLiving = () =>
+    [...state().players.values()].reduce((sum, p) => sum + (p.alive ? p.hp : 0), 0);
+
   // ── the plaza ──────────────────────────────────────────────────────────────
   check(
-    state().phase === GamePhase.Lobby && state().players.size === 2,
+    state().phase === GamePhase.Lobby && state().players.size === 3,
     `lobby plaza with ${state().players.size} players (code ${state().code})`,
-    `expected a 2-player lobby, got ${state().players.size} in phase "${state().phase}"`,
+    `expected a 3-player lobby, got ${state().players.size} in phase "${state().phase}"`,
   );
   check(
     state().arenaRadius === LOBBY_RADIUS,
@@ -176,12 +213,63 @@ async function main(): Promise<void> {
   );
 
   // ── fight to the death ─────────────────────────────────────────────────────
+  // ── solid cover blocks movement, identically on both sides ────────────────────
+  const wall = PIT.obstacles[0];
+  const minGap = wall.radius + PLAYER_RADIUS;
+  let deepestBreach = Number.POSITIVE_INFINITY;
+  for (let i = 0; i < 60; i++) {
+    steerTo(cid, wall.x, wall.z, i); // walk straight at its dead centre
+    await sleep(50);
+    const me = playerOf(cid.sessionId);
+    deepestBreach = Math.min(deepestBreach, Math.hypot(me.x - wall.x, me.z - wall.z));
+  }
+  stop(cid);
+  await sleep(SETTLE_MS);
+  check(
+    deepestBreach >= minGap - COVER_TOLERANCE_M,
+    `cover is solid — closest approach ${deepestBreach.toFixed(2)}m vs ${minGap}m`,
+    `walked ${deepestBreach.toFixed(2)}m into a prop that should stop you at ${minGap}m`,
+  );
+
+  // ── rain: weather is game state, not decoration ───────────────────────────────
+  host.send("event", { kind: EventKind.Rain });
+  await sleep(SETTLE_MS);
+  check(
+    state().weather === WeatherKind.Rain,
+    "rain event put the whole room on a slick floor",
+    `expected weather "${WeatherKind.Rain}", got "${state().weather}"`,
+  );
+
+  // ── meteors: telegraphed on the floor, then they land ─────────────────────────
+  let booms = 0;
+  host.onMessage("boom", () => booms++);
+
+  host.send("event", { kind: EventKind.Meteor });
+  await sleep(SETTLE_MS);
+  const telegraphed = [...state().hazards.values()].some(
+    (h) => h.phase === HazardPhase.Warn && h.radius === METEOR.blastRadius,
+  );
+  check(
+    state().hazards.size > 0 && telegraphed,
+    `meteor storm telegraphed on the floor (${state().hazards.size} marker(s) down)`,
+    "the meteor storm dropped no warning markers",
+  );
+
+  await sleep(METEOR.warnMs + SETTLE_MS);
+  check(
+    booms > 0,
+    `meteors landed and were broadcast (${booms} so far)`,
+    "a meteor warning never turned into an impact",
+  );
+
   let deathBroadcast = false;
   bob.onMessage("died", () => (deathBroadcast = true));
 
   const startedAt = Date.now();
+  const everyoneStanding = state().players.size;
   for (let round = 0; state().phase === GamePhase.Playing; round++) {
     if (Date.now() - startedAt > FIGHT_TIMEOUT_MS) break;
+    if (aliveCount() < everyoneStanding) break; // first blood — go and look at the ghost
     const gap = gapBetween(ann.sessionId, bob.sessionId);
     const scale = gap > HOLD_RANGE_M ? 1 : CREEP;
     steerToward(ann, bob.sessionId, scale, round);
@@ -194,6 +282,64 @@ async function main(): Promise<void> {
   }
   await sleep(SETTLE_MS);
 
+  // ── the dead stay in the world as ghosts ────────────────────────────────────
+  const fallen = [...state().players.values()].find((p) => !p.alive);
+  const ghostRoom = [ann, bob, cid].find((room) => !playerOf(room.sessionId).alive);
+  check(
+    !!fallen && !!ghostRoom,
+    `${fallen?.name ?? "somebody"} went down — the match carries on with ${aliveCount()} alive`,
+    "nobody died, so there is no ghost to test",
+  );
+
+  if (ghostRoom) {
+    // a ghost still drives: they can drift about the arena, they just cannot fight
+    const from = { x: playerOf(ghostRoom.sessionId).x, z: playerOf(ghostRoom.sessionId).z };
+    for (let i = 0; i < 20; i++) {
+      ghostRoom.send("input", { seq: 1000 + i, dx: 1, dz: 0 });
+      await sleep(50);
+    }
+    stop(ghostRoom);
+    await sleep(SETTLE_MS);
+    const to = playerOf(ghostRoom.sessionId);
+    check(
+      Math.hypot(to.x - from.x, to.z - from.z) > 1,
+      `a ghost still drifts around the arena (moved ${Math.hypot(to.x - from.x, to.z - from.z).toFixed(1)}m)`,
+      "a dead player was frozen in place instead of becoming a ghost",
+    );
+
+    // ...and can still harass the living, on a cooldown, without ever taking a kill
+    let pranked = 0;
+    ghostRoom.onMessage("prank", () => pranked++);
+    const hpBefore = healthOfTheLiving();
+    ghostRoom.send("prank", { kind: PrankKind.Bomb });
+    ghostRoom.send("prank", { kind: PrankKind.Bomb }); // instantly again: must be ignored
+    await sleep(SETTLE_MS);
+    check(
+      pranked === 1,
+      `a ghost prank landed, and the cooldown swallowed the second (${PRANK.cooldownMs}ms)`,
+      `expected exactly 1 prank through the cooldown, got ${pranked}`,
+    );
+    check(
+      healthOfTheLiving() < hpBefore && aliveCount() > 0,
+      "the prank hurt a survivor without eliminating anybody",
+      "a ghost prank did no damage at all",
+    );
+  }
+
+  // ── finish it off ───────────────────────────────────────────────────────────
+  const survivors = [ann, bob, cid].filter((room) => playerOf(room.sessionId).alive);
+  for (let round = 0; state().phase === GamePhase.Playing; round++) {
+    if (Date.now() - startedAt > FIGHT_TIMEOUT_MS) break;
+    for (const room of survivors) {
+      const foe = survivors.find((other) => other !== room);
+      if (!foe) continue;
+      const gap = gapBetween(room.sessionId, foe.sessionId);
+      steerToward(room, foe.sessionId, gap > HOLD_RANGE_M ? 1 : CREEP, round);
+      if (gap <= HOLD_RANGE_M + 1) room.send("attack", { seq: round });
+    }
+    await sleep(TICK_MS);
+  }
+  await sleep(SETTLE_MS);
   const winner = state().players.get(state().winnerId);
   check(
     state().phase === GamePhase.Ended,
@@ -213,7 +359,7 @@ async function main(): Promise<void> {
   console.log("   awards:   ", JSON.stringify(awards));
 
   check(
-    standings.length === 2 && standings[0].place === 1 && standings[0].name === winner?.name,
+    standings.length === 3 && standings[0].place === 1 && standings[0].name === winner?.name,
     "standings ranked winner-first",
     "standings are missing or not ranked winner-first",
   );
@@ -243,15 +389,20 @@ async function main(): Promise<void> {
     "everyone is back on the starting hammer",
     "a pickup survived the restart",
   );
+  check(
+    state().hazards.size === 0 && state().weather === WeatherKind.Clear,
+    "the storm and the rain did not follow everyone back to the plaza",
+    `restart left ${state().hazards.size} crater(s) and weather "${state().weather}"`,
+  );
 
-  await Promise.all([ann.leave(), bob.leave(), host.leave()]);
+  await Promise.all([ann.leave(), bob.leave(), cid.leave(), host.leave()]);
   await sleep(SETTLE_MS);
 }
 
 /** colyseus.js warns loudly about FX messages nothing listens for; we don't render. */
 function silenceFxWarnings(...rooms: Room[]): void {
   for (const room of rooms) {
-    for (const type of ["swing", "hit", "died", "prank"]) room.onMessage(type, () => {});
+    for (const type of ["swing", "hit", "died", "prank", "boom"]) room.onMessage(type, () => {});
   }
 }
 

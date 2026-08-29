@@ -38,6 +38,8 @@ export const ServerMsg = {
   Hit: "hit",
   Died: "died",
   Prank: "prank",
+  /** a meteor just landed — play the flash/shockwave/thud (the crater is synced). */
+  Boom: "boom",
 } as const;
 export type ServerMsg = (typeof ServerMsg)[keyof typeof ServerMsg];
 
@@ -121,6 +123,17 @@ export interface DiedEvent {
 export interface PrankEvent {
   id: string;
   kind: PrankKind;
+}
+
+/**
+ * A meteor hit the floor at this spot. The damage is already resolved and the crater
+ * is in `GameState.hazards`; this only exists so the FX and the thud fire on the
+ * exact frame of impact instead of on the next state patch.
+ */
+export interface BoomEvent {
+  x: number;
+  z: number;
+  radius: number;
 }
 
 // ── End-of-match payloads (JSON blobs on GameState) ─────────────────────────

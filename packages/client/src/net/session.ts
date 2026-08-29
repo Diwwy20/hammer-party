@@ -7,7 +7,10 @@ import {
   ROOM_NAME,
   ServerMsg,
   StageTheme,
+  WeatherKind,
+  type BoomEvent,
   type CosmeticMessage,
+  type DiedEvent,
   type EventKind,
   type PrankKind,
   type StageId,
@@ -17,9 +20,16 @@ import {
 } from "@hammer/shared";
 import { colyseus } from "./client";
 import { RECONNECT, WS_NORMAL_CLOSE } from "./config";
-import { Conn, useGame, type PickupView, type PlayerView } from "../store";
+import { Conn, useGame, type HazardView, type PickupView, type PlayerView } from "../store";
 import { recordSnapshot, resetBuffer, type Pos } from "./movement";
-import { markHit, markPrank, markSwing, resetCombatFx } from "../runtime/combatFx";
+import {
+  markBoom,
+  markDied,
+  markHit,
+  markPrank,
+  markSwing,
+  resetCombatFx,
+} from "../runtime/combatFx";
 import { CONNECT_ERROR } from "../config/copy";
 import { sfx } from "../audio";
 
@@ -83,8 +93,12 @@ function adoptRoom(r: Room): void {
   // Transient combat FX → the per-frame maps (never the store).
   r.onMessage(ServerMsg.Swing, (m: SwingEvent) => markSwing(m.id));
   r.onMessage(ServerMsg.Hit, (m: HitEvent) => markHit(m.id));
-  r.onMessage(ServerMsg.Died, () => {
-    /* the death ragdoll is driven by the synced `alive` flag; nothing to flash here */
+  // the avatar's switch to a ghost is driven by the synced `alive` flag; this is only
+  // so the puff of dust lands on the frame they went down, not on the next patch
+  r.onMessage(ServerMsg.Died, (m: DiedEvent) => markDied(m.id));
+  r.onMessage(ServerMsg.Boom, (m: BoomEvent) => {
+    markBoom(m.x, m.z, m.radius);
+    sfx.boom();
   });
   r.onMessage(ServerMsg.Prank, (m: PrankEvent) => {
     markPrank(m.id, m.kind);
@@ -105,6 +119,7 @@ interface DecodedMap<T> {
 interface DecodedState {
   players?: DecodedMap<PlayerView & Pos>;
   pickups?: DecodedMap<PickupView>;
+  hazards?: DecodedMap<HazardView>;
   phase: GamePhase;
   code?: string;
   hostSessionId?: string;
@@ -114,6 +129,7 @@ interface DecodedState {
   stageId?: StageId;
   stageTheme?: string;
   activeEvent?: EventKind | "";
+  weather?: WeatherKind;
   awardsJson?: string;
   standingsJson?: string;
 }
@@ -150,10 +166,16 @@ function applyState(state: DecodedState): void {
     pickups[id] = { kind: pk.kind, x: pk.x, z: pk.z, active: pk.active };
   });
 
+  const hazards: Record<string, HazardView> = {};
+  state.hazards?.forEach((hz, id) => {
+    hazards[id] = { kind: hz.kind, phase: hz.phase, x: hz.x, z: hz.z, radius: hz.radius };
+  });
+
   recordSnapshot(positions);
   useGame.getState().set({
     players,
     pickups,
+    hazards,
     phase: state.phase,
     code: state.code || joinedCode,
     hostSessionId: state.hostSessionId ?? "",
@@ -163,6 +185,7 @@ function applyState(state: DecodedState): void {
     stageId: state.stageId ?? DEFAULT_STAGE_ID,
     stageTheme: state.stageTheme || StageTheme.Colosseum,
     activeEvent: state.activeEvent ?? "",
+    weather: state.weather ?? WeatherKind.Clear,
     awardsJson: state.awardsJson ?? "",
     standingsJson: state.standingsJson ?? "",
   });

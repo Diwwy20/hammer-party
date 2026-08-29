@@ -58,8 +58,62 @@ export function isWeaponPickup(kind: string): kind is WeaponKind {
 export const EventKind = {
   Golden: "golden",
   Heal: "heal",
+  /** a telegraphed meteor storm rains down across the safe zone */
+  Meteor: "meteor",
+  /** the floor turns slick for a while — knockback carries far further */
+  Rain: "rain",
 } as const;
 export type EventKind = (typeof EventKind)[keyof typeof EventKind];
+
+/** Event kinds in the order the Host's buttons show them. */
+export const EVENT_ORDER: readonly EventKind[] = [
+  EventKind.Golden,
+  EventKind.Heal,
+  EventKind.Meteor,
+  EventKind.Rain,
+];
+
+/**
+ * A live environmental danger the server places in the world (currently only a
+ * meteor strike). Unlike a pickup, a hazard HURTS — it is synced so every client
+ * draws the same warning circle in the same place.
+ */
+export const HazardKind = {
+  Meteor: "meteor",
+} as const;
+export type HazardKind = (typeof HazardKind)[keyof typeof HazardKind];
+
+/** A hazard's lifecycle: the telegraphed warning, then the strike itself. */
+export const HazardPhase = {
+  /** marker is down, nothing has happened yet — this is the window to run */
+  Warn: "warn",
+  /** it landed; damage is already dealt, the client is only drawing the aftermath */
+  Impact: "impact",
+} as const;
+export type HazardPhase = (typeof HazardPhase)[keyof typeof HazardPhase];
+
+/**
+ * Weather. Drives the client's look AND the floor's grip on the server, so it is
+ * game state, not decoration.
+ */
+export const WeatherKind = {
+  Clear: "clear",
+  Rain: "rain",
+} as const;
+export type WeatherKind = (typeof WeatherKind)[keyof typeof WeatherKind];
+
+/**
+ * Solid props on a stage. They block movement on BOTH sides (the server clamps,
+ * the client's prediction clamps identically), so this is gameplay data — the look
+ * of each kind is the client's business.
+ */
+export const ObstacleKind = {
+  /** tall stone column — full-height cover you fight around */
+  Pillar: "pillar",
+  /** low crate — chest height, reads as scatter cover */
+  Crate: "crate",
+} as const;
+export type ObstacleKind = (typeof ObstacleKind)[keyof typeof ObstacleKind];
 
 /** Items a dead player can lob at a survivor. Harass, never eliminate. */
 export const PrankKind = {
