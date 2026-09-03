@@ -3,10 +3,11 @@ import { RoundedBox } from "@react-three/drei";
 import { DoubleSide, FrontSide, type Group, type Mesh, type Side } from "three";
 import { PLAYER_COLORS, TAU } from "@hammer/shared";
 import type { Cosmetic } from "../store";
-import { BLOB_SHADOW, RIG } from "../config/view";
+import { RIG } from "../config/view";
 import { CHARACTER_COLORS, GHOST_COLORS, IMPACT_COLORS, hairColor } from "../config/theme";
 import { Back, Face, Hat, cosmeticIds } from "./cosmetics";
-import { FaceExpression, blobShadowTexture, faceTexture, toonRampTexture } from "./textures";
+import { FaceExpression, faceTexture, toonRampTexture } from "./textures";
+import { ContactShadow } from "./ContactShadow";
 
 /**
  * The character: a chunky little fighter in a party uniform, built to be looked at.
@@ -662,49 +663,6 @@ function PaintedFace({
         depthWrite={false}
       />
     </mesh>
-  );
-}
-
-/**
- * The soft disc a character stands on and — for your own character only — a ring
- * round it in your colour.
- *
- * The blob is worth more than the real shadow map for grounding a cartoon
- * character: it is always exactly under the feet, it never flickers, and it costs
- * one transparent quad. `PlayerAvatar` shrinks it as the body leaves the ground.
- *
- * The ring is how you find YOURSELF in a crowd of 25. That job used to be done by a
- * glow on the body, which fought with the tint it was glowing through and washed
- * out the very colour it was meant to be pointing at. On the floor it is
- * unmistakable, and it leaves the character's own colours alone.
- */
-function ContactShadow({ groupRef, ring }: { groupRef: React.RefObject<Group>; ring?: string }) {
-  const alpha = useMemo(() => blobShadowTexture(), []);
-
-  return (
-    <group ref={groupRef} position={[0, BLOB_SHADOW.liftM, 0]}>
-      <mesh rotation={[-Math.PI / 2, 0, 0]}>
-        <circleGeometry args={[BLOB_SHADOW.radiusM, 20]} />
-        <meshBasicMaterial
-          color={CHARACTER_COLORS.blobShadow}
-          alphaMap={alpha}
-          transparent
-          opacity={BLOB_SHADOW.opacity}
-          depthWrite={false}
-        />
-      </mesh>
-      {ring && (
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, BLOB_SHADOW.liftM, 0]}>
-          <ringGeometry args={[BLOB_SHADOW.selfRing.innerM, BLOB_SHADOW.selfRing.outerM, 28]} />
-          <meshBasicMaterial
-            color={ring}
-            transparent
-            opacity={BLOB_SHADOW.selfRing.opacity}
-            depthWrite={false}
-          />
-        </mesh>
-      )}
-    </group>
   );
 }
 

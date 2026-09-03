@@ -1,4 +1,4 @@
-import { useEffect, useRef, type MutableRefObject } from "react";
+import { Suspense, useEffect, useRef, type MutableRefObject } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import { GamePhase, PLAYER_RADIUS, StageTheme, WeatherKind, approach } from "@hammer/shared";
@@ -113,16 +113,26 @@ export function World({
       {isPlaying && <Hazards />}
       {raining && <Rain />}
 
-      {ids.map((id) => (
-        <PlayerAvatar
-          key={id}
-          id={id}
-          isMe={id === sessionId}
-          hideTags={isPlaza}
-          ghostView={ghostView}
-          self={self}
-        />
-      ))}
+      {/*
+        The characters are authored models now, so they SUSPEND while their .glb
+        loads. The boundary is round the cast alone and falls back to nothing: the
+        arena, the sky and the HUD are all ready before anybody has to be drawn, and
+        a slow phone shows an empty plaza for a moment rather than a blank screen.
+        `preloadCharacters()` runs back on the join screen, so in practice this has
+        already resolved by the time anyone gets here.
+      */}
+      <Suspense fallback={null}>
+        {ids.map((id) => (
+          <PlayerAvatar
+            key={id}
+            id={id}
+            isMe={id === sessionId}
+            hideTags={isPlaza}
+            ghostView={ghostView}
+            self={self}
+          />
+        ))}
+      </Suspense>
 
       {/* who your next swing lands on, and what every swing just cost */}
       <TargetMarker

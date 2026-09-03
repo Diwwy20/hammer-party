@@ -11,4 +11,16 @@ export default tseslint.config(
       "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
     },
   },
+  {
+    /**
+     * `tools/` are Node scripts run straight off the disk — not browser code and
+     * not bundled — so they get Node's globals rather than the DOM's. Spelled out
+     * rather than pulled from the `globals` package, because this is the entire
+     * list these scripts use and it is not worth a dependency.
+     */
+    files: ["tools/**/*.mjs"],
+    languageOptions: {
+      globals: { Buffer: "readonly", URL: "readonly", console: "readonly", process: "readonly" },
+    },
+  },
 );
