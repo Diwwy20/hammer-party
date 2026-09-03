@@ -51,5 +51,11 @@ export function Joystick({ input }: { input: MutableRefObject<MoveVec> }) {
     };
   }, [input]);
 
-  return <div ref={zone} className="fixed bottom-6 left-6 h-[140px] w-[140px] touch-none" />;
+  return (
+    <>
+      {/* the resting pad: without it an untouched corner is just a floating blob */}
+      <div className="stick-pad" />
+      <div ref={zone} className="fixed bottom-6 left-6 z-20 h-[140px] w-[140px] touch-none" />
+    </>
+  );
 }

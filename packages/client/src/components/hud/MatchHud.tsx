@@ -1,58 +1,46 @@
 import { GamePhase, HAMMERS, HP_MAX, type HammerKind } from "@hammer/shared";
-import { selectAliveCount, selectMeAlive, selectMeHammer, selectMeHp, useGame } from "../../store";
+import { selectMeAlive, selectMeHammer, selectMeHp, useGame } from "../../store";
 import { hpColor, hpRatio } from "../../config/theme";
-import { GHOST_COPY } from "../../config/copy";
+import { HammerIcon } from "../dressing/ItemIcon";
 
 /**
- * The top-left status box during a match and on the results screen: how many are
- * left, plus your own weapon + HP while you're still in it.
+ * Your own vitals while you're in the fight: a chunky HP bar and the hammer you're
+ * carrying, sat in the band above the thumbs where the lobby's dock lives.
+ *
+ * It is built out of the SAME three layers as the nameplates floating over everyone
+ * else (`three/PlayerAvatar.tsx`): a dark track that is your maximum, the bright
+ * fill of what is left, and the number on the end. One bar design, read the same way
+ * whether it is over your head or under your thumbs.
+ *
+ * The hammer is drawn with the same painted icon the wardrobe's weapon grid uses, so
+ * "the thing I am holding" and "the thing I saw in the dressing room" are visibly
+ * one object. Everything about the ROOM (how many are left, who the Host is
+ * watching) belongs to `HudTop`; this is only ever about you, and it disappears the
+ * moment you're out.
  */
 export function MatchHud() {
   const isHost = useGame((s) => s.isHost);
   const phase = useGame((s) => s.phase);
-  const aliveCount = useGame(selectAliveCount);
   const meAlive = useGame(selectMeAlive);
   const meHp = useGame(selectMeHp);
   const meHammer = useGame(selectMeHammer);
-  const watchingName = useGame((s) => (s.spectateId ? (s.players[s.spectateId]?.name ?? "") : ""));
 
-  const isPlaying = phase === GamePhase.Playing;
-  const isFighting = !isHost && meAlive && isPlaying;
-  const isSpectating = !isHost && !meAlive && isPlaying;
+  const isFighting = !isHost && meAlive && phase === GamePhase.Playing;
+  if (!isFighting) return null;
+
   const ratio = hpRatio(meHp, HP_MAX);
   const hammerLabel = HAMMERS[meHammer as HammerKind]?.label ?? meHammer;
 
   return (
-    <div className="hud">
-      <div>
-        <b>⚔ กำลังประลอง</b> · {aliveCount} รอด
+    <div className="vitals">
+      <div className="hp-track">
+        <div className="hp-fill" style={{ width: `${ratio * 100}%`, background: hpColor(ratio) }} />
+        <span className="hp-num">{Math.ceil(meHp)}</span>
       </div>
-
-      {isFighting && (
-        <div className="mt-1.5 flex items-center gap-2">
-          <span className="text-[11px] font-bold">🔨 {hammerLabel}</span>
-          <div className="h-[9px] w-[120px] overflow-hidden rounded-full bg-line">
-            <div
-              className="h-full rounded-full"
-              style={{
-                width: `${ratio * 100}%`,
-                background: hpColor(ratio),
-                transition: "width 120ms linear",
-              }}
-            />
-          </div>
-          <span className="text-[11px] font-bold">{Math.ceil(meHp)}</span>
-        </div>
-      )}
-
-      {isSpectating && <div className="muted mt-1 text-[11px]">{GHOST_COPY.title}</div>}
-
-      {/* "Host" stays in English per the agreed wording — never "เจ้าภาพ". */}
-      {isHost && (
-        <div className="muted text-[11px]">
-          {watchingName ? `มุมมอง Host · ตามดู ${watchingName}` : "มุมมอง Host · ลากเพื่อหมุนกล้อง"}
-        </div>
-      )}
+      <span className="glass glass--weapon">
+        <HammerIcon kind={meHammer} label={hammerLabel} />
+        {hammerLabel}
+      </span>
     </div>
   );
 }

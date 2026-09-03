@@ -1,9 +1,9 @@
 import { useEffect, type MutableRefObject } from "react";
+import { selectMeHammer, useGame } from "../../store";
 import { sendAttack } from "../../net/session";
 import { markSwing } from "../../runtime/combatFx";
 import { sfx } from "../../audio";
-import { HUD } from "../../config/view";
-import { NO_MOVEMENT, type MoveVec } from "../../runtime/input";
+import { NO_MOVEMENT, swingRepeatMs, type MoveVec } from "../../runtime/input";
 
 /**
  * Desktop controls: WASD / arrows to move, Space to swing.
@@ -36,6 +36,8 @@ export function KeyboardControls({
   /** false for a ghost: they still walk, but they have no hammer to swing. */
   enableAttack: boolean;
 }) {
+  const hammer = useGame(selectMeHammer);
+
   useEffect(() => {
     const held = new Set<string>();
     let swingTimer: number | undefined;
@@ -62,7 +64,7 @@ export function KeyboardControls({
       if (!enableAttack || swingTimer) return; // nothing to swing with, or just key-repeat
       sfx.swing();
       swing();
-      swingTimer = window.setInterval(swing, HUD.swingRepeatMs);
+      swingTimer = window.setInterval(swing, swingRepeatMs(hammer));
     };
     const stopSwinging = () => {
       if (!swingTimer) return;
@@ -107,7 +109,7 @@ export function KeyboardControls({
       stopSwinging();
       input.current = { ...NO_MOVEMENT };
     };
-  }, [input, sessionId, enableAttack]);
+  }, [input, sessionId, enableAttack, hammer]);
 
   return null;
 }

@@ -20,3 +20,6 @@ Thumbs.db
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# 3D asset packs used by tools/asset-bench (344 MB, re-clone with its README)
+tools/asset-bench/vendor/

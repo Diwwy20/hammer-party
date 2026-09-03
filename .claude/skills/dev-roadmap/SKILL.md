@@ -86,7 +86,7 @@ New stages via config.
 
 Owner-requested (2026-08): the lobby became a live 3D plaza and the **monthly leaderboard was removed** (results are per-match only, shown on a screen the Host leaves up).
 
-- **One world, all phases**: `App` routes every phase to `GameScreen`; it renders phase overlays (`LobbyBar`/`CustomizeSheet`/`HostLobbyOverlay`/`ResultsOverlay`). No more `LobbyScreen`/`HostScreen`/`CharacterPreview`.
+- **One world, all phases**: `App` routes every phase to `GameScreen`; it renders phase overlays (`HudTop`/`LobbyDock`/`HostLobbyOverlay`/`ResultsOverlay`), and swaps the whole canvas for the dressing room when the wardrobe is open. No more `LobbyScreen`/`HostScreen`/`CharacterPreview`/`CustomizeSheet`.
 - **Plaza lobby**: `LOBBY_RADIUS` in constants; server `updateLobby()` (walk + knockback, no zone/pickups/damage), `handleAttack` gated so damage/kills only in `playing` (lobby bonks = knockback + swing FX, **no HP loss**), `spawnLobbyPlayer()` on join/reset. Client: third-person follow cam in lobby, name tags/HP hidden, **only the room count `X/25` — no other names**.
 - **Results**: `GameState.standingsJson` (winner-first ranking) + `awardsJson`; `ResultsOverlay` shows standings + funny awards, closeable (dismiss is local; nothing persisted).
 - **Removed**: `server/src/leaderboard.ts`, express + `/api/leaderboard`, `client/src/{components/Leaderboard.tsx,net/leaderboard.ts}`, TanStack Query (+ `QueryClientProvider`), `HTTP_URL`.
@@ -182,6 +182,29 @@ something real to do after you die.
 - 📦 `feat(presentation): cover art, animated characters, dressed arena, weather events, ghosts`
 
 ## 🎉 All phases (00–05 + 3D-lobby refactor + architecture pass) complete — remaining work is event-day hardening (real 25-device load test, dress rehearsal, LAN fallback, reconnection on flaky wifi).
+
+---
+
+## 🚧 Phases 06–10 — replacing the procedural 3D with authored models (PLANNED, not started)
+
+The owner rejected the hand-built character a third time. The conclusion is that primitives have a
+ceiling — no hair, no cloth, no face — so characters, weapons, cosmetics and the map move to
+**KayKit CC0 low-poly models**.
+
+**The plan is written in full. Read it before scoping any of this:**
+[docs/plans/phases-06-10-model-characters.md](../../../docs/plans/phases-06-10-model-characters.md)
+
+- **06** — one KayKit character walking in-game, idle + walk only. The phase that finally answers
+  "do 25 phones survive?". Nothing else changes and the server is not touched. **Start here.**
+- **07** — combat animation, with the swing clip time-scaled to that hammer's `cooldownMs` so the
+  visual contact frame lands on the server's hit.
+- **08** — the wardrobe: add `characterIndex`, `hairIndex` becomes a colour, drop `faceIndex` and
+  `backIndex`. First phase that changes the schema, so server clamping ships with a unit test.
+- **09** — the arena, keeping `StageConfig.obstacles` in step with the new props (invisible-wall risk).
+- **10** — delete the dead procedural code, tune draw calls, run the 25-device rehearsal.
+
+⚠️ One decision is open and blocks Phase 06: where player colour lives once players pick a character
+(recommended: characters keep their own colours, identity moves to the floor ring + nameplate).
 
 ---
 

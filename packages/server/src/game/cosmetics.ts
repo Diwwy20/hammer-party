@@ -2,6 +2,7 @@ import {
   BACKS,
   COSMETIC_NONE_INDEX,
   FACES,
+  HAIR_COLORS,
   HATS,
   PLAYER_COLORS,
   clampIndex,
@@ -20,6 +21,7 @@ import type { Player } from "@hammer/shared/schema";
 
 const CATALOG_SIZE = {
   colorIndex: PLAYER_COLORS.length,
+  hairIndex: HAIR_COLORS.length,
   hatIndex: HATS.length,
   faceIndex: FACES.length,
   backIndex: BACKS.length,
@@ -33,6 +35,7 @@ export function applyCosmetic(player: Player, choice: CosmeticMessage): void {
   };
 
   set("colorIndex", choice.colorIndex);
+  set("hairIndex", choice.hairIndex);
   set("hatIndex", choice.hatIndex);
   set("faceIndex", choice.faceIndex);
   set("backIndex", choice.backIndex);

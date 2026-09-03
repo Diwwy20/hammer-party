@@ -29,13 +29,34 @@ Distilled project knowledge lives in `.claude/skills/`. Load only what a task ne
     objects in `shared/src/enums.ts` — **no bare string literals in comparisons**.
   - The server publishes FACTS, the client owns COPY: `GameState.activeEvent` is an `EventKind`, and
     awards are `{kind, name, value}` — no Thai UI strings in the simulation.
-- **Presentation + spectator pass (latest):**
+- **Look-and-feel overhaul (latest — the whole game was redesigned to be worth looking at):**
+  - **The world is a PLACE.** A gradient sky dome with a drifting cloud bank (`three/Sky.tsx`), one warm
+    sun whose shadow camera actually covers the arena, and a thick floating ISLAND under the arena —
+    tiled floor, coloured rim, low wall with posts, tapered underside (`PLATFORM`/`FLOOR` in `config/view.ts`).
+  - **Procedural textures** (`three/textures.ts`): the floor tiles, the sky gradient, the contact-shadow
+    blob, the zone wall's fade and the character's FACE are all painted into a canvas at runtime — nothing
+    is fetched, so the game still opens instantly on party wifi.
+  - **The plaza is a party** (`three/Plaza.tsx`): planters and trees, bunting on a rope, balloons, confetti
+    and a floor medallion — all instanced, one draw call per kind.
+  - **The safe zone is a wall of light**, not a line on the floor; the safe disc keeps its tile size as it
+    shrinks (the texture's repeat is rewound each frame).
+  - **The character was rebuilt to be cute** (`three/Character.tsx`): chibi proportions (big head, small
+    body, noodle arms with mitten hands, big shoes) and a **painted face** — one curved plate wearing a
+    canvas texture, so blinking and wincing cost a texture swap rather than a dozen meshes per player.
+    Animation gained head-lag on turns, a footfall squash, idle sway/tilt and a soft contact shadow.
+  - **The HUD is three bands** and nothing ever lands in two at once: `HudTop` (where you are) · the middle
+    band above the thumbs (`LobbyDock` in the lobby, `MatchHud` vitals in a match) · the thumbs themselves.
+    The old lobby status paragraph and control hints are gone; the ready count rides inside the ready button.
+  - **Opening the wardrobe used to swing the camera round in front of you** — superseded by the dressing
+    room below.
+- **Presentation + spectator pass:**
   - **Join flow:** cover art (`components/GameCover.tsx`, inline SVG so it is instant and offline-safe)
     on both the join screen and the loading splash; name entry with a 🎲 suggestion button.
   - **Characters:** a proper animation RIG (`three/Character.tsx`) driven by `three/PlayerAvatar.tsx` —
     cute rounded proportions, distance-driven walk cycle, idle breathing, swing arc + trail, hit squash,
     impact burst, death poof. All measurements come from `RIG` in `config/view.ts`.
-  - **Camera is third-person everywhere** (was first-person in a match) — see `ui-conventions`.
+  - **Camera was third-person everywhere** (was first-person in a match) — superseded by the isometric
+    pass below; see `ui-conventions`.
   - **Stage:** the default stage is now a dressed arena — solid pillars/crates you collide with
     (`StageConfig.obstacles`, `pushOutOfObstacles` shared by server AND client prediction) plus stands,
     columns, banners and braziers laid out from `StageConfig.decor`.
@@ -44,9 +65,81 @@ Distilled project knowledge lives in `.claude/skills/`. Load only what a task ne
   - **Ghosts:** dead players stay in the world and keep flying; the living cannot see them; they prank
     the survivor they are floating nearest to, on a cooldown.
   - **Host spectating:** a free orbit cam, or a chase cam locked to any living player (`HostSpectateBar`).
+- **Character + weapon + combat-animation overhaul (latest — the owner asked for the lot to be torn out
+  and redone; see `ui-conventions` for the full conventions):**
+  - **The character is DRESSED and has HAIR.** A scarf that doubles as the collar, a placket, a belt and
+    buckle, a flared hem, boots with cuffs and soles; a hairstyle in two thin shells plus a fringe, side
+    locks and a cowlick. The bean underneath is unchanged — the clothes are what give a round body depth.
+  - **Toon-shaded, with a rim light.** Characters are lit through a stepped ramp (`TOON`,
+    `toonRampTexture`) while the arena stays ordinarily lit, plus a cool no-shadow back light
+    (`LIGHTING.rimDirection`) that peels them off the floor behind them.
+  - **The face got eyes**: iris, an under-glow, a pupil, two catchlights and a lash line, plus two new
+    expressions — `Fierce` mid-swing and `Dizzy` for the dead.
+  - **Everything loose lags** — head, hair and scarf are dragged by the body, not animated with it — and
+    feet roll onto their toes.
+  - **The swing is a four-beat blow that sweeps ROUND the body** (lift+wind → sweep through → hit-stop
+    HOLD → unwind), with the hammer whipping behind the arm and past it, the body lunging into it, and a
+    painted billboarded smear. Its length is derived from that hammer's own cooldown.
+  - **The hammer is a lathe-turned mallet lying ACROSS the swing**, and each of the four kinds has its own
+    metal, timber, bulk and smear colour (`hammerStyle`) — you can read someone's weapon from across the
+    arena.
+  - **A hit lands as four things at once**: squash, a white flash, a billboarded star and a ground ring.
+  - **LOD**: the trim/buckle/cuffs/soles/loose hair are only built inside `LOD.detailInM`, which is what
+    pays for the richer rig at 25 players.
+  - Your own character is marked by a **ring on the floor** in your colour, not a glow on the body.
+- **Isometric + dressing-room redesign (LATEST — the owner asked for the presentation to be torn out and
+  rebuilt around an isometric arena and a proper dressing room; `ui-conventions` has the full conventions):**
+  - **The camera is ISOMETRIC in every phase** (`CAMERA.isoYawRad`, 45° round, ~37° down, never rotating).
+    `runtime/input.ts` `toWorld()` turns the stick by that same yaw, once — it is the only place the camera
+    angle touches movement. The Host's chase cam uses the same framing and no longer swings round its subject.
+  - **The floor is WEATHERED STONE FLAGS** (`stoneFloorTexture`): per-flag tone variance, wavering mortar
+    that still tiles (the canvas-edge wobble is mirrored), a lit top bevel and a shaded bottom one, speckled
+    wear and hairline cracks. The bevels are drawn INSIDE the mortar — under it, the mortar eats them.
+  - **Grass grows through it** (`three/Grass.tsx`): painted patches for colour, crossed alpha quads for
+    silhouette, tufts clustered INSIDE the patches, and both culled against the safe zone — so the closing
+    wall visibly burns the grass away.
+  - **The arena stands in a COUNTRYSIDE** (`three/Backdrop.tsx`): a grass plain below the island, a
+    treeline, a village and hills, each ring washed further toward the sky. That haze is the "depth of
+    field" — real DOF is a post-processing dependency we do not have, and a cartoon wants aerial
+    perspective anyway.
+  - **A hit now lands as seven things**: squash, white flash, billboarded star, ground ring, dust, a spray
+    of physical **SPARKS** (`Points`, thrown on a cone and pulled down by gravity), and a **FRACTURE** left
+    in the flagstones that outlives the blow. Sparks are alpha-blended and saturated, never additive — over
+    pale stone, additive light is invisible.
+  - **Combat UI:** a nameplate with a three-layer HP bar (dark max track · pale drain segment · bright fill)
+    and the number on it, floating **damage numbers** from a pooled overlay (size and colour carry the
+    magnitude), and a **target ring + reticle** on whoever your next swing would land on — running the same
+    reach/arc test the server will.
+  - **THE DRESSING ROOM** (`three/DressingRoom.tsx` + `components/dressing/`): a real room — plank floor,
+    panelling, rug, shelves with books and pots and rolled maps, a plant, an afternoon window — with an
+    ornate full-length mirror you stand in, on a turntable you can drag. It renders in the SAME canvas with
+    the arena UNMOUNTED, so it is the cheapest screen in the game rather than the most expensive.
+  - **Wardrobe grids with painted SVG icons** (`ItemIcon.tsx`) drawn from the same palette as the meshes —
+    not emoji. **HAIR is now a real cosmetic slot** (`hairIndex`, 12 tones, clamped server-side like the
+    rest), and the hammer tab is a clearly-labelled PREVIEW, because hammers are found in the arena.
+  - **The default look is the game's own character**: gold shirt, dark hair, black top hat with a RED brim.
+- 🚧 **NEXT UP — Phases 06–10: the procedural characters are being replaced by authored models.**
+  The owner rejected the hand-built look a third time; the conclusion is that primitives have a
+  ceiling (no hair, no cloth, no face), not that the code was bad. Decided, evidenced and planned in
+  **[docs/plans/phases-06-10-model-characters.md](docs/plans/phases-06-10-model-characters.md)** —
+  read it before touching `client/src/three/`. Headlines:
+  - **KayKit CC0 packs**, stylised low-poly (PEAK-ish, deliberately NOT Genshin). Roster of 6:
+    Knight · Barbarian · Rogue_Hooded · Mage · Skeleton_Minion · **Vampire** (the Rogue's mesh with
+    a repainted palette — no such model exists to download).
+  - The packs are **lighter than what we have**: 1 material and one 16 KB texture per character,
+    ~230 draw calls for 25 players against 700+ today.
+  - That texture is a **grid of flat swatches**, and every character samples the same cells —
+    `(0,0)` skin · `(1,0)` hair · `(2,0)` eyes — so one wardrobe repaints them all. Hats/capes/weapons
+    hang off bones (`head`, `chest`, `handslot.r`) on a shared 41-bone rig, so they swap between
+    characters by re-parenting. Hairstyles, mouths and eye shapes are NOT possible — colour only.
+  - **Start with Phase 06** (one character walking in-game, nothing else) because it finally answers
+    the 25-device question. One open decision is flagged at the top of the plan: where player colour
+    goes once players pick a character.
+  - `tools/asset-bench/` is the throwaway viewer used to decide all of this — not part of the product.
 - ⚠️ **Still owed (event-day hardening):** a real ~25-device load test (fps/latency) — the richer
-  character rig and dressed stage raise the draw-call count, so this matters more than it did — plus a
-  full dress rehearsal + LAN fallback, and reconnection tested on genuinely flaky wifi.
+  character rig, dressed stage, backdrop and per-hit particles raise the draw-call count, so this matters
+  more than it did — plus a full dress rehearsal + LAN fallback, and reconnection tested on genuinely
+  flaky wifi.
 - Styling is **Tailwind v4 + shadcn (Base UI)** — see `ui-conventions`.
 
 ## 🔑 Non-negotiable rules
@@ -95,11 +188,14 @@ packages/client/src     App.tsx (routing) · store.ts (mirror + selectors) · au
                         · config/{view,theme,copy}.ts   — presentation tuning · palettes · Thai copy
                         · net/{config,client,session,movement}.ts
                         · runtime/{combatFx,localPlayer,input}.ts — per-frame state outside React
-                        · three/{World,Arena,Pickups,Hazards,Weather,PlayerAvatar,Character,
-                                 useSelfControl,cosmetics,types}
-                        · components/{GameCover,LobbyBar,CustomizeSheet,Customizer,HostLobbyOverlay}
-                        · components/hud/{Joystick,AttackButton,KeyboardControls,MatchHud,HostSpectateBar,
-                                          EventBanner,HostEventBar,PrankBar,ZoneWarning,ResultsOverlay}
+                        · three/{World,Sky,Arena,Grass,Backdrop,Plaza,Pickups,Hazards,Weather,Impact,
+                                 PlayerAvatar,Character,Hammer,DressingRoom,textures,useSelfControl,
+                                 cosmetics,types}
+                        · components/{GameCover,HostLobbyOverlay}
+                        · components/dressing/{DressingScreen,Wardrobe,ItemIcon}
+                        · components/hud/{HudTop,LobbyDock,Joystick,AttackButton,KeyboardControls,MatchHud,
+                                          HostSpectateBar,EventBanner,HostEventBar,PrankBar,ZoneWarning,
+                                          ResultsOverlay}
                         · screens/{JoinScreen,GameScreen}
 e2e/                    @hammer/e2e — smoke.ts: the end-to-end smoke (outside packages/ on purpose)
 docs/                   hammer-party-status.pdf · hammer-party-phases.pdf · plans/

@@ -1,10 +1,12 @@
 import { type MutableRefObject } from "react";
 import { useFrame } from "@react-three/fiber";
+import type { Camera } from "three";
 import {
   GHOST,
   MOVE_SPEED,
   PLAYER_RADIUS,
   approach,
+  clamp,
   pushOutOfObstacles,
   type Obstacle,
 } from "@hammer/shared";
@@ -23,12 +25,14 @@ import type { SelfTransform } from "./types";
  * badly out of sync). The server still owns the truth — this just hides the round
  * trip. Everyone ELSE is interpolated instead (`net/movement.ts`).
  *
- * The camera is always a FIXED-ORIENTATION third-person follow cam. It never rotates
- * with your facing, which is what keeps the stick honest everywhere (up is always
- * away from the camera) and what lets you actually watch your own character fight.
+ * The camera is an ISOMETRIC follow cam: it looks down on the arena from one fixed
+ * corner, at one fixed angle, and never rotates with your facing. That is what keeps
+ * the stick honest everywhere (`runtime/input.ts` turns it by the same yaw, once),
+ * what lets you see a hammer coming from the side, and what lets you watch your own
+ * character fight.
  */
 
-/** Which of the three player views is on screen. */
+/** Which player view is on screen. */
 export const ViewMode = {
   /** waiting-room plaza: close in, so outfits read */
   Plaza: "plaza",
@@ -44,6 +48,10 @@ const FRAMING: Record<ViewMode, { height: number; distance: number; lookHeight: 
   [ViewMode.Match]: CAMERA.match,
   [ViewMode.Ghost]: CAMERA.ghostCam,
 };
+
+/** The corner the camera looks from, resolved once. */
+const YAW_SIN = Math.sin(CAMERA.isoYawRad);
+const YAW_COS = Math.cos(CAMERA.isoYawRad);
 
 export function useSelfControl({
   sessionId,
@@ -97,15 +105,40 @@ export function useSelfControl({
     reconcile(self.current, sessionId, dt, stunned && !ghost);
     localPlayer.distanceFromCentre = Math.hypot(self.current.x, self.current.z);
 
-    // fixed-orientation follow cam: parked behind (-z) and above, always looking +z
-    const framing = FRAMING[mode];
-    const { x, z } = self.current;
-    const ease = approach(CAMERA.followEaseRate, dt);
-    state.camera.position.x += (x - state.camera.position.x) * ease;
-    state.camera.position.y += (framing.height - state.camera.position.y) * ease;
-    state.camera.position.z += (z - framing.distance - state.camera.position.z) * ease;
-    state.camera.lookAt(x, framing.lookHeight, z);
+    moveCamera(state.camera, self.current, mode, dt, pullback(state.viewport.aspect));
   });
+}
+
+/**
+ * Park the camera for this view.
+ *
+ * It sits at a fixed offset from the player — `isoYawRad` round and `height` up —
+ * and looks back at them. Nothing about it depends on which way the player is
+ * facing, in any phase, which is exactly what makes the stick mean one thing all
+ * game long and what lets the camera show you the hammer arriving from your flank.
+ */
+function moveCamera(
+  camera: Camera,
+  self: SelfTransform,
+  mode: ViewMode,
+  dt: number,
+  pull: number,
+): void {
+  const framing = FRAMING[mode];
+  const distance = framing.distance * pull;
+  const height = framing.height * pull;
+  const { x, z } = self;
+
+  const ease = approach(CAMERA.followEaseRate, dt);
+  camera.position.x += (x - YAW_SIN * distance - camera.position.x) * ease;
+  camera.position.y += (height - camera.position.y) * ease;
+  camera.position.z += (z - YAW_COS * distance - camera.position.z) * ease;
+  camera.lookAt(x, framing.lookHeight, z);
+}
+
+/** How far to back the camera off for this screen shape. 1 on anything landscape. */
+function pullback(aspect: number): number {
+  return clamp(CAMERA.portrait.referenceAspect / aspect, 1, CAMERA.portrait.maxPullback);
 }
 
 /** Keep the predicted position inside the wall, exactly like the server does. */

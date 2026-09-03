@@ -24,6 +24,7 @@ import { Conn, useGame, type HazardView, type PickupView, type PlayerView } from
 import { recordSnapshot, resetBuffer, type Pos } from "./movement";
 import {
   markBoom,
+  markDamage,
   markDied,
   markHit,
   markPrank,
@@ -92,7 +93,12 @@ function adoptRoom(r: Room): void {
 
   // Transient combat FX → the per-frame maps (never the store).
   r.onMessage(ServerMsg.Swing, (m: SwingEvent) => markSwing(m.id));
-  r.onMessage(ServerMsg.Hit, (m: HitEvent) => markHit(m.id));
+  r.onMessage(ServerMsg.Hit, (m: HitEvent) => {
+    markHit(m.id);
+    // the server already states how much it hurt, so the number over the victim is a
+    // FACT rather than the client's guess at one
+    markDamage(m.id, m.dmg, m.id === useGame.getState().sessionId);
+  });
   // the avatar's switch to a ghost is driven by the synced `alive` flag; this is only
   // so the puff of dust lands on the frame they went down, not on the next patch
   r.onMessage(ServerMsg.Died, (m: DiedEvent) => markDied(m.id));
@@ -148,6 +154,7 @@ function applyState(state: DecodedState): void {
       z: p.z,
       ready: p.ready,
       colorIndex: p.colorIndex,
+      hairIndex: p.hairIndex,
       hatIndex: p.hatIndex,
       faceIndex: p.faceIndex,
       backIndex: p.backIndex,

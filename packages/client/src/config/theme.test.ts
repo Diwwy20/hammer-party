@@ -49,7 +49,7 @@ describe("stagePalette", () => {
     for (const id of STAGE_ORDER) {
       const palette = stagePalette(STAGES[id].theme);
       expect(palette.sky).toMatch(/^#/);
-      expect(palette.safe).toMatch(/^#/);
+      expect(palette.flagA).toMatch(/^#/);
     }
   });
 

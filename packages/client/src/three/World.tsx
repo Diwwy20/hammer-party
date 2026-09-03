@@ -1,23 +1,19 @@
 import { useEffect, useRef, type MutableRefObject } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
-import { Grid, OrbitControls } from "@react-three/drei";
-import {
-  GamePhase,
-  PLAYER_RADIUS,
-  StageTheme,
-  WeatherKind,
-  approach,
-  lerpAngle,
-} from "@hammer/shared";
-import { selectIsGhost, selectStage, useGame } from "../store";
+import { OrbitControls } from "@react-three/drei";
+import { GamePhase, PLAYER_RADIUS, StageTheme, WeatherKind, approach } from "@hammer/shared";
+import { selectIsGhost, selectMeAlive, selectStage, useGame } from "../store";
 import type { MoveVec } from "../runtime/input";
 import { sampleOther } from "../net/movement";
-import { CAMERA, SCENE } from "../config/view";
-import { WORLD_COLORS, stagePalette } from "../config/theme";
+import { BACKDROP, CAMERA, LIGHTING, SKY } from "../config/view";
+import { stagePalette, type StagePalette } from "../config/theme";
 import { Arena } from "./Arena";
+import { Backdrop } from "./Backdrop";
 import { Hazards } from "./Hazards";
+import { AmbientDust, DamageNumbers, GroundCracks, TargetMarker } from "./Impact";
 import { Pickups } from "./Pickups";
 import { PlayerAvatar } from "./PlayerAvatar";
+import { CloudBank, SkyDome } from "./Sky";
 import { Rain } from "./Weather";
 import { ViewMode, useSelfControl } from "./useSelfControl";
 import type { SelfTransform } from "./types";
@@ -50,6 +46,7 @@ export function World({
   const { camera } = useThree();
 
   const isGhost = useGame(selectIsGhost);
+  const meAlive = useGame(selectMeAlive);
   const phase = useGame((s) => s.phase);
   const arenaRadius = useGame((s) => s.arenaRadius);
   const theme = useGame((s) => s.stageTheme);
@@ -61,7 +58,8 @@ export function World({
   const isPlaying = phase === GamePhase.Playing;
   const raining = weather === WeatherKind.Rain;
   const palette = stagePalette(isPlaza ? StageTheme.Lobby : theme);
-  const sky = raining ? palette.skyRain : palette.sky;
+  /** under a downpour the whole dome flattens to one grey — no gradient, no sun */
+  const horizon = raining ? palette.skyRain : palette.sky;
 
   /** players drive themselves in the plaza and in a match — dead ones included */
   const controlling = !isHost && !!sessionId && (isPlaying || isPlaza);
@@ -91,25 +89,25 @@ export function World({
 
   return (
     <>
-      <color attach="background" args={[sky]} />
-      <ambientLight intensity={raining ? 0.62 : 0.8} />
-      <directionalLight
-        position={[10, 18, 8]}
-        intensity={raining ? 0.7 : 1.2}
-        castShadow
-        shadow-mapSize={[2048, 2048]}
+      <color attach="background" args={[horizon]} />
+      <fog attach="fog" args={[horizon, SKY.fogNearM, SKY.fogFarM]} />
+      <SkyDome
+        palette={
+          raining
+            ? { ...palette, skyTop: palette.skyRain, skyMid: palette.skyRain, sky: palette.skyRain }
+            : palette
+        }
       />
+      <CloudBank />
+
+      <Lights raining={raining} skyColor={palette.sky} groundColor={palette.platform} />
+
+      {/* the countryside the arena stands in — drawn before it, and never in the way */}
+      <Countryside palette={palette} />
 
       <Arena isPlaza={isPlaza} raining={raining} />
-      <Grid
-        args={[arenaRadius * 2, arenaRadius * 2]}
-        cellSize={SCENE.grid.cellSize}
-        cellColor={WORLD_COLORS.gridCell}
-        sectionSize={SCENE.grid.sectionSize}
-        sectionColor={WORLD_COLORS.gridSection}
-        fadeDistance={SCENE.grid.fadeDistance}
-        position={[0, 0.012, 0]}
-      />
+      <AmbientDust />
+      <GroundCracks />
 
       <Pickups />
       {isPlaying && <Hazards />}
@@ -126,6 +124,14 @@ export function World({
         />
       ))}
 
+      {/* who your next swing lands on, and what every swing just cost */}
+      <TargetMarker
+        self={self}
+        sessionId={sessionId}
+        active={controlling && isPlaying && meAlive}
+      />
+      {!isPlaza && <DamageNumbers sessionId={sessionId} self={self} />}
+
       {orbiting && (
         <OrbitControls
           target={[...CAMERA.spectator.target]}
@@ -137,33 +143,115 @@ export function World({
   );
 }
 
+/**
+ * One sun, one cool rim from behind, one sky-to-ground fill, and a little ambient.
+ *
+ * The shadow camera is sized to the WHOLE arena on purpose: three.js defaults it to
+ * a few metres, which quietly means everything past the middle of the map casts no
+ * shadow at all — the single flattest-looking thing about the old scene.
+ *
+ * The RIM light casts nothing and lights nothing you look at directly. It exists to
+ * catch the edge of whatever is facing away from the sun, which is what lifts a
+ * character off the floor behind it.
+ */
+function Lights({
+  raining,
+  skyColor,
+  groundColor,
+}: {
+  raining: boolean;
+  skyColor: string;
+  groundColor: string;
+}) {
+  const [dx, dy, dz] = LIGHTING.sunDirection;
+  const [rx, ry, rz] = LIGHTING.rimDirection;
+  const distance = LIGHTING.sunDistanceM;
+
+  return (
+    <>
+      <ambientLight
+        intensity={raining ? LIGHTING.ambientIntensityRain : LIGHTING.ambientIntensity}
+      />
+      <directionalLight
+        position={[rx * distance, ry * distance, rz * distance]}
+        color={skyColor}
+        intensity={raining ? LIGHTING.rimIntensityRain : LIGHTING.rimIntensity}
+      />
+      <hemisphereLight args={[skyColor, groundColor, LIGHTING.hemisphereIntensity]} />
+      <directionalLight
+        position={[dx * distance, dy * distance, dz * distance]}
+        intensity={raining ? LIGHTING.sunIntensityRain : LIGHTING.sunIntensity}
+        castShadow
+        shadow-mapSize={[LIGHTING.shadowMapSize, LIGHTING.shadowMapSize]}
+        shadow-camera-left={-LIGHTING.shadowSpanM}
+        shadow-camera-right={LIGHTING.shadowSpanM}
+        shadow-camera-top={LIGHTING.shadowSpanM}
+        shadow-camera-bottom={-LIGHTING.shadowSpanM}
+        shadow-camera-near={LIGHTING.shadowNearM}
+        shadow-camera-far={LIGHTING.shadowFarM}
+        shadow-bias={LIGHTING.shadowBias}
+        shadow-normalBias={LIGHTING.shadowNormalBias}
+      />
+    </>
+  );
+}
+
+/**
+ * The plain outside the arena, and everything standing on it.
+ *
+ * It sits `groundDropM` BELOW the arena floor, which is the whole reason the island
+ * reads as a raised stone plateau rather than a slab hanging in space: the arena
+ * looks down on the countryside, the countryside runs off into the fog, and the
+ * island's tapered underside is buried out of sight beneath it.
+ *
+ * A stage with no `ground` in its palette is one that is meant to be floating (the
+ * sky stage), and it gets neither — the drifting cloud slabs do that job there, and
+ * a grass plain underneath would give the illusion away.
+ */
+function Countryside({ palette }: { palette: StagePalette }) {
+  if (!palette.ground) return null;
+
+  return (
+    <group position={[0, -BACKDROP.groundDropM, 0]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+        <circleGeometry args={[BACKDROP.groundRadiusM, BACKDROP.groundSegments]} />
+        <meshStandardMaterial color={palette.ground} roughness={1} />
+      </mesh>
+      <Backdrop palette={palette} />
+    </group>
+  );
+}
+
 /** Stages have cover; the plaza doesn't, and ghosts ignore it. Shared so it's stable. */
 const EMPTY_OBSTACLES = Object.freeze([]) as never[];
+
+/** The corner every camera in the game looks from, resolved once. */
+const YAW_SIN = Math.sin(CAMERA.isoYawRad);
+const YAW_COS = Math.cos(CAMERA.isoYawRad);
 
 /**
  * The Host's "watch this player" camera.
  *
- * Unlike a player's own cam this one DOES swing round with the player it follows —
- * the big screen wants to see the fight from inside it. Position is read straight
- * out of the interpolation buffer, so it tracks the same smoothed motion the avatar
- * is drawn at instead of jittering on every 20Hz patch.
+ * It is the player camera, closer in: the SAME fixed isometric angle, tracking one
+ * person around the arena. It used to swing round behind whoever it followed, which
+ * meant the big screen lurched every time its subject turned — on a projector, in
+ * front of a room, that reads as the camera being broken rather than as drama.
+ *
+ * Position is read straight out of the interpolation buffer, so it tracks the same
+ * smoothed motion the avatar is drawn at instead of jittering on every 20Hz patch.
  */
 function useSpectatorCamera(spectateId: string): void {
-  const yaw = useRef(0);
-
   useFrame((state, dt) => {
     if (!spectateId) return;
     const target = sampleOther(spectateId, performance.now());
     if (!target) return;
 
-    yaw.current = lerpAngle(yaw.current, target.dir, approach(CAMERA.follow.turnRate, dt));
-    const behindX = target.x - Math.sin(yaw.current) * CAMERA.follow.distance;
-    const behindZ = target.z - Math.cos(yaw.current) * CAMERA.follow.distance;
-
     const ease = approach(CAMERA.follow.easeRate, dt);
-    state.camera.position.x += (behindX - state.camera.position.x) * ease;
+    const cornerX = target.x - YAW_SIN * CAMERA.follow.distance;
+    const cornerZ = target.z - YAW_COS * CAMERA.follow.distance;
+    state.camera.position.x += (cornerX - state.camera.position.x) * ease;
     state.camera.position.y += (CAMERA.follow.height - state.camera.position.y) * ease;
-    state.camera.position.z += (behindZ - state.camera.position.z) * ease;
+    state.camera.position.z += (cornerZ - state.camera.position.z) * ease;
     state.camera.lookAt(target.x, CAMERA.follow.lookHeight, target.z);
   });
 }

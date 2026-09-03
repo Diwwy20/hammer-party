@@ -1,4 +1,5 @@
 import type { PrankKind } from "@hammer/shared";
+import { COMBAT_FX, DAMAGE_FX } from "../config/view";
 
 /**
  * Transient combat FX, written by the network layer and polled per-frame by the
@@ -48,6 +49,57 @@ export const hazardSeenAt: Record<string, number> = {};
 /** `performance.now()` of this client's last prank throw — drives the cooldown dial. */
 export const prankThrownAt = { t: 0 };
 
+/**
+ * A fracture left in the flagstones where a hammer came down.
+ *
+ * Cracks live in the WORLD, not on the player who made them — the player walks away
+ * and the damage to the floor does not. It is the one combat effect that outlasts
+ * its own combat, which is precisely why it is worth having.
+ */
+export interface Crack {
+  t: number;
+  x: number;
+  z: number;
+  /** how far the painted star is turned, so no two smashes look like the same decal */
+  spin: number;
+}
+
+/** Fractures currently on the floor. A ring buffer — the oldest is written over. */
+export const cracks: Crack[] = [];
+
+/** Record a smash at this spot on the floor. */
+export function markCrack(x: number, z: number): void {
+  cracks.push({ t: performance.now(), x, z, spin: Math.random() * Math.PI * 2 });
+  if (cracks.length > COMBAT_FX.crackPool) cracks.shift();
+}
+
+/** One damage number, waiting to be picked up by a free tag in the overlay pool. */
+export interface DamageHit {
+  t: number;
+  /** who took it — the tag follows them until it fades */
+  id: string;
+  dmg: number;
+  /** true when this is damage YOU took: it gets its own colour */
+  mine: boolean;
+  /** where it drifts to, so two hits in the same instant don't stack up illegibly */
+  spread: number;
+}
+
+/**
+ * Damage numbers waiting to be drawn. A short queue, drained by the overlay pool
+ * every frame: several blows can land in the same tick, and each one is only
+ * interesting for nine hundred milliseconds.
+ */
+export const damageHits: DamageHit[] = [];
+
+/** Record a blow for the floating number over the victim. */
+export function markDamage(id: string, dmg: number, mine: boolean): void {
+  if (dmg <= 0) return;
+  damageHits.push({ t: performance.now(), id, dmg, mine, spread: Math.random() * 2 - 1 });
+  // never queue more than the pool could ever show — the oldest is dropped unseen
+  if (damageHits.length > DAMAGE_FX.pool) damageHits.shift();
+}
+
 export function markSwing(id: string): void {
   swingAt[id] = performance.now();
 }
@@ -85,5 +137,7 @@ export function resetCombatFx(): void {
     for (const key of Object.keys(bag)) delete (bag as Record<string, unknown>)[key];
   }
   blasts.length = 0;
+  cracks.length = 0;
+  damageHits.length = 0;
   prankThrownAt.t = 0;
 }

@@ -130,11 +130,13 @@ client/src/
 ├─ config/               view.ts (tuning) · theme.ts (palettes) · copy.ts (Thai copy)
 ├─ net/                  config.ts · client.ts · session.ts (the only Colyseus caller) · movement.ts (interp buffer)
 ├─ runtime/              per-frame state deliberately OUTSIDE React: combatFx · localPlayer · input
-├─ three/                World · Arena (floor + cover + dressing) · Pickups · Hazards (meteors)
-│                        · Weather (rain) · PlayerAvatar (the animation driver) · Character (the rig)
-│                        · cosmetics · useSelfControl (prediction + camera)
-├─ components/           GameCover (the SVG cover art) · LobbyBar · CustomizeSheet · Customizer
-│                        · HostLobbyOverlay
+├─ three/                World · Arena (floor + cover + dressing) · Grass · Backdrop (treeline/village/hills)
+│                        · Pickups · Hazards (meteors) · Weather (rain) · Impact (sparks, ground
+│                        fractures, ambient dust, target ring + reticle, damage numbers)
+│                        · PlayerAvatar (the animation driver) · Character (the rig) · cosmetics
+│                        · DressingRoom (the wardrobe scene) · useSelfControl (prediction + camera)
+├─ components/           GameCover (the SVG cover art) · HostLobbyOverlay
+├─ components/dressing/  DressingScreen (the overlay) · Wardrobe (the grids) · ItemIcon (painted SVG previews)
 ├─ components/hud/       Joystick · AttackButton · KeyboardControls · MatchHud · EventBanner
 │                        · HostEventBar · HostSpectateBar · PrankBar · ZoneWarning · ResultsOverlay
 └─ screens/              JoinScreen · GameScreen (composition only — picks which overlays are on screen)
@@ -148,6 +150,14 @@ client/src/
   changed nothing a component reads does not re-render it.
 - Anything that changes every frame but is needed by DOM (out-of-zone warning) is polled on a timer from
   `runtime/localPlayer.ts`, not pushed through React.
+- Overlay text that changes per frame — the floating damage numbers, the nameplate's draining HP segment —
+  lives in a fixed POOL of DOM nodes mutated imperatively inside `useFrame`. Mounting a component per hit
+  would re-render a tree several times a second per player, twenty-five times over.
+
+**The camera and the stick are one decision.** Every player view is a fixed ISOMETRIC cam at
+`CAMERA.isoYawRad`; `runtime/input.ts` `toWorld()` rotates the screen-space stick by that same yaw, and it is
+the ONLY place the camera angle is allowed to leak into movement. Both the prediction loop and the input
+sender call it, so there is exactly one mapping to get wrong.
 
 ## Room / matchmaking (implemented)
 

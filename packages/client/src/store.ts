@@ -4,6 +4,7 @@ import {
   DEFAULT_BACK_INDEX,
   DEFAULT_COLOR_INDEX,
   DEFAULT_FACE_INDEX,
+  DEFAULT_HAIR_INDEX,
   DEFAULT_HAMMER,
   DEFAULT_HAT_INDEX,
   DEFAULT_STAGE_ID,
@@ -44,6 +45,7 @@ export interface PlayerView {
   z: number;
   ready: boolean;
   colorIndex: number;
+  hairIndex: number;
   hatIndex: number;
   faceIndex: number;
   backIndex: number;
@@ -79,6 +81,7 @@ export interface HazardView {
 /** Just the cosmetic slots — what AvatarBody (three/cosmetics.tsx) needs to draw an avatar. */
 export interface Cosmetic {
   colorIndex: number;
+  hairIndex: number;
   hatIndex: number;
   faceIndex: number;
   backIndex: number;
@@ -157,6 +160,7 @@ export const useGame = create<GameStore>((set) => ({
 /** Fallback cosmetics before the server echoes our own player back. */
 export const FALLBACK_COSMETIC: Cosmetic = {
   colorIndex: DEFAULT_COLOR_INDEX,
+  hairIndex: DEFAULT_HAIR_INDEX,
   hatIndex: DEFAULT_HAT_INDEX,
   faceIndex: DEFAULT_FACE_INDEX,
   backIndex: DEFAULT_BACK_INDEX,
