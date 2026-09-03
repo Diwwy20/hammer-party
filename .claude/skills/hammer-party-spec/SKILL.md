@@ -84,7 +84,9 @@ Host can trigger any event by hand.
 
 ## Roles
 
-- **Player**: cosmetic-only customization (no stat effect) — for photos & finding yourself.
+- **Player**: cosmetic-only customization (no stat effect) — for photos & finding yourself. Five slots
+  (shirt colour, hair, hat, face, back), picked in the dressing room. The hammer grid there is a PREVIEW:
+  hammers are picked up in the arena, so choosing one in the wardrobe would be a stat, not a cosmetic.
 - **Host (invisible)**: the big screen. Two cameras: a free orbit cam over the whole
   arena, or a chase cam locked to any LIVING player (`spectateId`, local to that screen —
   never sent anywhere). Ghosts are deliberately not offered: the show is the fight.

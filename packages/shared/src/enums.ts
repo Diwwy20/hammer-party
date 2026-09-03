@@ -145,6 +145,8 @@ export type StageTheme = (typeof StageTheme)[keyof typeof StageTheme];
 /** The cosmetic slots on `Player`. Keys match the schema field names on purpose. */
 export const CosmeticSlot = {
   Color: "colorIndex",
+  /** hair tone — picked in the wardrobe, not derived from the body colour any more */
+  Hair: "hairIndex",
   Hat: "hatIndex",
   Face: "faceIndex",
   Back: "backIndex",

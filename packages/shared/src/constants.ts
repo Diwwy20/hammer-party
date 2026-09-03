@@ -285,12 +285,36 @@ export function randomRoomCode(len: number = ROOM_CODE_LENGTH): string {
 export const PLAYER_COLORS = [
   "#e0562f", // red-orange
   "#f2a03a", // orange (brand)
-  "#e6c12f", // gold
+  "#e6c12f", // gold — the signature shirt
   "#4caf50", // green
   "#2f9ee0", // blue
   "#7b53e0", // purple
   "#e05aa0", // pink
   "#5b6672", // slate
+] as const;
+
+/**
+ * Hair tones, picked in the wardrobe like every other cosmetic.
+ *
+ * It used to be derived from `colorIndex` — eight players, eight hair colours, free.
+ * That was the right trade when the wardrobe was a strip of swatches; it is the wrong
+ * one now that the dressing room shows a GRID of hair beside a mirror, because the
+ * one thing a grid of hair has to do is let you pick the hair. Twelve tones: four
+ * naturals, four dyed brights, and four that are somewhere in between.
+ */
+export const HAIR_COLORS = [
+  "#2b1d19", // near-black
+  "#4a2f22", // dark brown
+  "#7d4a24", // chestnut
+  "#b9803a", // honey
+  "#e3c169", // blonde
+  "#f0e0c0", // platinum
+  "#c2452f", // ginger
+  "#8e3b5e", // plum
+  "#3d5a8c", // steel blue
+  "#3f7f5e", // moss
+  "#6b4fa8", // violet
+  "#b9c2cc", // silver
 ] as const;
 
 /** One cosmetic choice. `id` drives the 3D mesh; `icon`/`label` drive the picker UI. */
@@ -329,7 +353,15 @@ export const BACKS: readonly CosmeticOption[] = [
   { id: BackId.Jetpack, label: "เจ็ตแพ็ก", icon: "🚀" },
 ];
 
-export const DEFAULT_COLOR_INDEX = 1; // orange
-export const DEFAULT_HAT_INDEX = COSMETIC_NONE_INDEX;
+/**
+ * The look you arrive in: a yellow shirt under a black top hat with a red brim.
+ *
+ * It is deliberately not "nothing". This is the character on the cover art and on
+ * the join screen, so the person who walks in and never opens the wardrobe still
+ * gets the game's own face rather than a bald bean in the house colour.
+ */
+export const DEFAULT_COLOR_INDEX = 2; // gold — the signature yellow shirt
+export const DEFAULT_HAIR_INDEX = 1; // dark brown, under the hat
+export const DEFAULT_HAT_INDEX = HATS.findIndex((hat) => hat.id === HatId.TopHat);
 export const DEFAULT_FACE_INDEX = COSMETIC_NONE_INDEX;
 export const DEFAULT_BACK_INDEX = COSMETIC_NONE_INDEX;

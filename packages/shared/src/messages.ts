@@ -75,6 +75,7 @@ export interface ReadyMessage {
 /** Cosmetic-only loadout (no stats). Any subset of slots may be sent. */
 export interface CosmeticMessage {
   colorIndex?: number;
+  hairIndex?: number;
   hatIndex?: number;
   faceIndex?: number;
   backIndex?: number;

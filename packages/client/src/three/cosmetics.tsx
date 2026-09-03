@@ -107,9 +107,11 @@ export function Hat({ id, ghost, opacity = 1 }: CosmeticProps) {
     case HatId.TopHat:
       return (
         <group position={[0, RIG.hatY - 0.04, 0]}>
+          {/* the brim is RED — it is what makes this the game's own hat rather than
+              a generic black cylinder, and it reads from right across the arena */}
           <mesh castShadow>
             <cylinderGeometry args={[0.44, 0.44, 0.06, 20]} />
-            <meshStandardMaterial color={tint(c.hatDark, ghost)} roughness={0.5} {...see} />
+            <meshStandardMaterial color={tint(c.hatBrim, ghost)} roughness={0.55} {...see} />
           </mesh>
           <mesh position={[0, 0.3, 0]} castShadow>
             <cylinderGeometry args={[0.28, 0.29, 0.56, 20]} />

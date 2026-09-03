@@ -80,6 +80,34 @@ export const SPLASH_TIPS = [
   "หลบหลังเสาไว้ ตอนโดนไล่ตีมันช่วยได้จริง",
 ] as const;
 
+/**
+ * The dressing room: the wardrobe's own screen.
+ *
+ * `hammerNote` is the important one. The hammer grid is a PREVIEW — hammers are
+ * picked up in the arena, never chosen in here — and a grid of things you cannot
+ * equip is a broken promise unless it says so in as many words.
+ */
+export const DRESSING_COPY = {
+  title: "ห้องแต่งตัว",
+  /** the tabs down the side of the grid, in the order they are shown */
+  tabs: {
+    color: "สีเสื้อ",
+    hair: "ทรงผม",
+    hat: "หมวก",
+    face: "หน้า",
+    back: "หลัง",
+    hammer: "ค้อน",
+  },
+  random: "สุ่มชุด",
+  done: "เสร็จแล้ว",
+  ready: "พร้อมแล้ว",
+  notReady: "กดพร้อม",
+  leave: "ออก",
+  /** shown under the mirror — the one control that isn't a button */
+  rotateHint: "ลากเพื่อหมุนตัวละคร",
+  hammerNote: "ค้อนเก็บได้ในสนาม ไม่ต้องเลือกที่นี่ — ดูตัวอย่างได้",
+} as const;
+
 /** What a dead player sees and does — they stay in the world as a ghost. */
 export const GHOST_COPY = {
   title: "👻 คุณเป็นวิญญาณแล้ว",

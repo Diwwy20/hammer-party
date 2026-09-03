@@ -3,6 +3,7 @@ import {
   DEFAULT_BACK_INDEX,
   DEFAULT_COLOR_INDEX,
   DEFAULT_FACE_INDEX,
+  DEFAULT_HAIR_INDEX,
   DEFAULT_HAMMER,
   DEFAULT_HAT_INDEX,
   HP_MAX,
@@ -66,6 +67,7 @@ export class Player extends Schema {
   // lobby / cosmetics
   declare ready: boolean;
   declare colorIndex: number;
+  declare hairIndex: number;
   declare hatIndex: number;
   declare faceIndex: number;
   declare backIndex: number;
@@ -84,6 +86,7 @@ export class Player extends Schema {
     this.kills = 0;
     this.ready = false;
     this.colorIndex = DEFAULT_COLOR_INDEX;
+    this.hairIndex = DEFAULT_HAIR_INDEX;
     this.hatIndex = DEFAULT_HAT_INDEX;
     this.faceIndex = DEFAULT_FACE_INDEX;
     this.backIndex = DEFAULT_BACK_INDEX;
@@ -103,6 +106,7 @@ defineTypes(Player, {
   kills: "number",
   ready: "boolean",
   colorIndex: "number",
+  hairIndex: "number",
   hatIndex: "number",
   faceIndex: "number",
   backIndex: "number",

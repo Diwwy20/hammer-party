@@ -28,6 +28,7 @@ export const readySchema = z.object({ ready: z.boolean() });
 
 export const cosmeticSchema = z.object({
   colorIndex: z.number().int().optional(),
+  hairIndex: z.number().int().optional(),
   hatIndex: z.number().int().optional(),
   faceIndex: z.number().int().optional(),
   backIndex: z.number().int().optional(),

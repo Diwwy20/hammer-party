@@ -1,0 +1,674 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Hammer Party — asset bench</title>
+<style>
+  :root {
+    --ink: #22303c;
+    --card: rgba(255, 255, 255, 0.93);
+    --line: rgba(34, 48, 60, 0.12);
+    --brand: #f2a03a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--ink); }
+  canvas { display: block; }
+
+  .panel {
+    position: fixed; background: var(--card); border: 1px solid var(--line);
+    border-radius: 18px; box-shadow: 0 8px 28px rgba(20, 40, 60, 0.14);
+    backdrop-filter: blur(8px);
+  }
+
+  #stats { top: 14px; left: 14px; padding: 10px 14px; font-variant-numeric: tabular-nums; font-size: 13px; line-height: 1.5; }
+  #stats b { font-size: 22px; }
+  #stats .row { display: flex; gap: 10px; justify-content: space-between; min-width: 180px; }
+  #stats .k { opacity: 0.55; }
+  #verdict { margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--line); font-weight: 700; }
+
+  #bar { left: 50%; transform: translateX(-50%); bottom: 12px; padding: 11px 13px; display: flex; flex-direction: column; gap: 9px; max-width: calc(100vw - 24px); }
+  /* every row stays ONE row and scrolls sideways — the bar must never grow tall
+     enough to cover the character it is there to dress */
+  .line { display: flex; gap: 14px; align-items: center; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .line::-webkit-scrollbar { display: none; }
+  .group { display: flex; gap: 5px; align-items: center; flex-wrap: nowrap; flex: 0 0 auto; }
+  .label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.07em; opacity: 0.45; margin-right: 2px; }
+  button {
+    font: inherit; font-size: 12.5px; font-weight: 600; color: var(--ink); cursor: pointer;
+    background: #fff; border: 1.5px solid var(--line); border-radius: 999px; padding: 6px 12px;
+    transition: transform 0.08s, background 0.15s, border-color 0.15s;
+  }
+  button:hover { transform: translateY(-1px); }
+  button[aria-pressed="true"] { background: var(--brand); border-color: var(--brand); color: #fff; }
+  button.bone[aria-pressed="true"] { background: #6f7f96; border-color: #6f7f96; }
+  /* colour slots are swatches, not words */
+  .sw { width: 21px; height: 21px; padding: 0; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1.5px var(--line); }
+  .sw[aria-pressed="true"] { box-shadow: 0 0 0 2.5px var(--brand); transform: translateY(-1px); }
+  .sw.keep { background: linear-gradient(135deg, #fff 46%, #c8ccd2 46%, #c8ccd2 54%, #fff 54%); }
+  select { font: inherit; font-size: 12.5px; padding: 6px 10px; border-radius: 999px; border: 1.5px solid var(--line); background: #fff; color: var(--ink); max-width: 200px; }
+
+  #hint { position: fixed; top: 14px; right: 14px; padding: 10px 13px; font-size: 12px; line-height: 1.6; max-width: 250px; }
+  #hint b { color: #b4531c; }
+  #loading { position: fixed; inset: 0; display: grid; place-items: center; background: #cfe8f5; font-size: 15px; font-weight: 600; z-index: 9; }
+  @media (max-width: 860px) { #hint { display: none; } }
+  /* on a phone the controls must not eat the stage: each row scrolls sideways */
+  @media (max-width: 700px) {
+    #bar { left: 8px; right: 8px; bottom: 8px; transform: none; max-width: none; padding: 8px; gap: 6px; }
+    .line, .group { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+    .line::-webkit-scrollbar, .group::-webkit-scrollbar { display: none; }
+    .group { flex: 0 0 auto; }
+    button { padding: 5px 10px; font-size: 12px; white-space: nowrap; }
+    #stats { padding: 8px 11px; font-size: 12px; }
+    #stats b { font-size: 18px; }
+    #stats .row { min-width: 132px; }
+  }
+</style>
+</head>
+<body>
+<div id="loading">กำลังโหลดโมเดล…</div>
+
+<div class="panel" id="stats">
+  <div class="row"><span class="k">FPS</span><b id="fps">–</b></div>
+  <div class="row"><span class="k">draw calls</span><span id="calls">–</span></div>
+  <div class="row"><span class="k">triangles</span><span id="tris">–</span></div>
+  <div class="row"><span class="k">ตัวละคร</span><span id="count">–</span></div>
+  <div id="verdict">–</div>
+</div>
+
+<div class="panel" id="hint">
+  <b>เลือก 8 ตัวจาก 9 ตัวนี้</b> — กดดูทีละตัว ตัวไหนไม่เอาบอกได้<br><br>
+  กด <b>25</b> แล้วอ่านเลข FPS มุมซ้ายบน — นั่นคือคำตอบว่างานเลี้ยงรอดไหม<br><br>
+  กด <b>สนาม</b> เพื่อดูแมพที่แต่งด้วยของจากชุดเดียวกัน<br><br>
+  ลากเมาส์เพื่อหมุนกล้อง
+</div>
+
+<div class="panel" id="bar">
+  <div class="line"><div class="group" id="chars"><span class="label">ตัวละคร</span></div></div>
+  <div class="line">
+    <div class="group" id="skin"><span class="label">ผิว</span></div>
+    <div class="group" id="hair"><span class="label">ผม</span></div>
+    <div class="group" id="eyes"><span class="label">ตา</span></div>
+    <div class="group" id="outfit"><span class="label">ชุด</span></div>
+  </div>
+  <div class="line"><div class="group" id="hat"><span class="label">หมวก</span></div></div>
+  <div class="line">
+    <div class="group"><span class="label">ท่า</span><select id="anim"></select></div>
+    <div class="group" id="weapons"><span class="label">อาวุธ</span></div>
+    <div class="group" id="crowd"><span class="label">จำนวน</span></div>
+    <div class="group">
+      <button id="toon" aria-pressed="false">Toon</button>
+      <button id="arena" aria-pressed="false">สนาม</button>
+    </div>
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+} }
+</script>
+
+<script type="module">
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { clone as skeletonClone } from "three/addons/utils/SkeletonUtils.js";
+
+/* ── the game's own numbers, so the comparison is honest ───────────────── */
+const ISO_YAW = Math.PI / 4;                    // CAMERA.isoYawRad
+const PLAZA = { height: 5.6, distance: 7.6 };   // CAMERA.plaza
+const MATCH = { height: 9.5, distance: 12.5 };  // CAMERA.match
+const PLAYER_COLORS = ["#e0562f","#f2a03a","#e6c12f","#4caf50","#2f9ee0","#7b53e0","#e05aa0","#5b6672"];
+
+const ADV = "vendor/adventurers/addons/kaykit_character_pack_adventures/";
+const SKEL = "vendor/skeletons/addons/kaykit_character_pack_skeletons/";
+const DUNGEON = "vendor/dungeon/addons/kaykit_dungeon_remastered/Assets/gltf/";
+
+/**
+ * The roster the owner picked, plus the Vampire.
+ *
+ * The Vampire is not a downloaded model — nobody gives away a vampire that fits
+ * this rig. It is the Rogue's mesh wearing a REPAINTED palette (`recolor`), which
+ * costs no download, keeps all 76 animations, and cannot drift out of art style
+ * because it is the same character underneath.
+ */
+const CHARACTERS = [
+  { id: "Knight",          label: "อัศวิน",         url: `${ADV}Characters/gltf/Knight.glb`,   outfit: "3,0" },
+  { id: "Barbarian",       label: "บาร์บาเรียน",    url: `${ADV}Characters/gltf/Barbarian.glb`, outfit: "6,0" },
+  { id: "Rogue_Hooded",    label: "โจรคลุมฮู้ด",     url: `${ADV}Characters/gltf/Rogue_Hooded.glb`, outfit: "0,1" },
+  { id: "Mage",            label: "จอมเวท",         url: `${ADV}Characters/gltf/Mage.glb`,     outfit: "0,1" },
+  { id: "Skeleton_Minion", label: "โครงกระดูกจิ๋ว",  url: `${SKEL}Characters/gltf/Skeleton_Minion.glb`, bone: true, outfit: "6,0" },
+  { id: "Vampire",         label: "แวมไพร์",        url: `${ADV}Characters/gltf/Rogue.glb`, recolor: "vampire", outfit: "0,1" },
+];
+
+/**
+ * Where the cosmetics live in the atlas.
+ *
+ * Every Adventurers character samples the SAME three cells for the same three
+ * things — verified by walking each head mesh's UVs (skin ~250-350 verts, hair
+ * ~300-470, eyes always 80-98). So one wardrobe drives all of them.
+ */
+const SLOT_CELL = { skin: "0,0", hair: "1,0", eyes: "2,0" };
+
+const SKIN_TONES  = ["#f3c9a4", "#e0a878", "#c9855a", "#9c6242", "#6f4530", "#dfe4ee"];
+const HAIR_TONES  = ["#231a16", "#4a2f1e", "#8a5a2b", "#c9993f", "#e8e3d6", "#8f3f7a", "#2f6fa8", "#b03a2e"];
+const EYE_TONES   = ["#2b2320", "#3f6f4a", "#2f6fa8", "#8a5a2b", "#a8232f", "#7a4fbf"];
+const OUTFIT_DYES = ["#e0562f", "#f2a03a", "#e6c12f", "#4caf50", "#2f9ee0", "#7b53e0", "#e05aa0", "#5b6672"];
+
+/** Hats that can be lifted off one character and dropped onto another. */
+const HATS = [
+  ["ไม่ใส่", null],
+  ["หมวกอัศวิน", { url: `${ADV}Characters/gltf/Knight.glb`,    mesh: "Knight_Helmet" }],
+  ["หมวกไวกิ้ง", { url: `${ADV}Characters/gltf/Barbarian.glb`, mesh: "Barbarian_Hat" }],
+  ["หมวกจอมเวท", { url: `${ADV}Characters/gltf/Mage.glb`,      mesh: "Mage_Hat" }],
+];
+
+const WEAPONS = [
+  ["ไม่ถือ", null],
+  ["ขวานใหญ่", `${ADV}Assets/gltf/axe_2handed.gltf`],
+  ["ดาบใหญ่", `${ADV}Assets/gltf/sword_2handed.gltf`],
+  ["ขวานเล็ก", `${ADV}Assets/gltf/axe_1handed.gltf`],
+];
+
+/** Gear the pack builds into the character — hidden so our own weapon is the only one. */
+const BUILT_IN_GEAR = /Sword|Shield|Staff|Wand|Dagger|Knife|Throwable|Crossbow|Spellbook|Quiver|Blade|Axe|Arrow|Mug|Turret/i;
+const FAVOURITE_ANIMS = ["Idle", "Walking_A", "Running_A", "2H_Melee_Attack_Chop",
+                         "1H_Melee_Attack_Chop", "Hit_A", "Death_A", "Cheer"];
+
+/* ── scene ─────────────────────────────────────────────────────────────── */
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = skyTexture();
+scene.fog = new THREE.Fog(0xbfe0ef, 36, 84);
+
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 220);
+const camTarget = new THREE.Vector3(0, 1.0, 0);
+let yaw = ISO_YAW, framing = PLAZA;
+
+scene.add(new THREE.HemisphereLight(0xdcf2ff, 0x6f7f5a, 1.1));
+const sun = new THREE.DirectionalLight(0xfff2d8, 2.0);
+sun.position.set(9, 15, 7);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.bias = -0.0006;
+Object.assign(sun.shadow.camera, { left: -20, right: 20, top: 20, bottom: -20, near: 1, far: 52 });
+scene.add(sun);
+const rim = new THREE.DirectionalLight(0x9fd8ff, 0.7);
+rim.position.set(-8, 5, -9);
+scene.add(rim);
+
+const ground = new THREE.Mesh(
+  new THREE.CircleGeometry(28, 64).rotateX(-Math.PI / 2),
+  new THREE.MeshStandardMaterial({ map: stoneTexture(), roughness: 0.95 }),
+);
+ground.receiveShadow = true;
+scene.add(ground);
+
+/* ── procedural backdrops, the same trick the game already uses ────────── */
+function skyTexture() {
+  const c = document.createElement("canvas"); c.width = 4; c.height = 256;
+  const g = c.getContext("2d"), grad = g.createLinearGradient(0, 0, 0, 256);
+  grad.addColorStop(0, "#66b6e8"); grad.addColorStop(0.55, "#a9dcf3"); grad.addColorStop(1, "#e8f6e2");
+  g.fillStyle = grad; g.fillRect(0, 0, 4, 256);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.mapping = THREE.EquirectangularReflectionMapping;
+  return t;
+}
+function stoneTexture() {
+  const S = 512, c = document.createElement("canvas"); c.width = c.height = S;
+  const g = c.getContext("2d");
+  g.fillStyle = "#7d8168"; g.fillRect(0, 0, S, S);
+  for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++) {
+    const tone = 134 + Math.random() * 24;
+    g.fillStyle = `rgb(${tone | 0},${(tone + 5) | 0},${(tone - 20) | 0})`;
+    g.fillRect(x * 128 + 5, y * 128 + 5, 118, 118);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(10, 10);
+  return t;
+}
+function toonRamp() {
+  const c = document.createElement("canvas"); c.width = 4; c.height = 1;
+  const g = c.getContext("2d");
+  ["#6d7f96", "#a9b6c4", "#e2e6e6", "#ffffff"].forEach((col, i) => { g.fillStyle = col; g.fillRect(i, 0, 1, 1); });
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.minFilter = t.magFilter = THREE.NearestFilter;
+  return t;
+}
+const RAMP = toonRamp();
+
+/* ── repainting a character ────────────────────────────────────────────── */
+/**
+ * Every KayKit character is ONE mesh set sampling ONE 16 KB atlas, and that atlas
+ * is not a painting — it is 32 flat colour swatches. So a whole new character is
+ * a new palette: read the atlas once, push every pixel through a rule, done.
+ *
+ * The vampire rule, in three bands:
+ *   skin (warm orange hues)  → porcelain, faintly blue, so the face reads as dead
+ *   reds and magentas        → blood, for the cape lining and trim
+ *   everything else          → cold near-black, keeping its own light-to-dark shape
+ *                              so folds and the eyes survive
+ */
+const RECOLORS = {
+  vampire: {
+    rule(h, s, l) {
+      /* skin only — LIGHT warm swatches. Hair is the same hue but darker, and it
+         has to stay dark or the whole head turns into one pale lump. */
+      if (h >= 14 && h <= 44 && s > 0.16 && l > 0.52) return [268, 0.11, 0.74 + l * 0.18];
+      if ((h >= 318 || h <= 11) && s > 0.32)          return [352, 0.74, 0.16 + l * 0.28];
+      return [262, 0.26, 0.03 + l * 0.19];
+    },
+    /* parts that get a flat colour instead of the repainted atlas — the pack's own
+       swatches are flat anyway, so this reads as native, not as a patch. */
+    parts: [[/Cape/i, "#8f1226"]],
+  },
+};
+
+function rgbToHsl(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+  const l = (max + min) / 2;
+  if (d === 0) return [0, 0, l];
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  const h = max === r ? ((g - b) / d + (g < b ? 6 : 0))
+          : max === g ? (b - r) / d + 2
+          :             (r - g) / d + 4;
+  return [h * 60, s, l];
+}
+function hslToRgb(h, s, l) {
+  h = ((h % 360) + 360) % 360 / 360;
+  if (s === 0) { const v = Math.round(l * 255); return [v, v, v]; }
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q;
+  const hue = (t) => {
+    t = (t + 1) % 1;
+    if (t < 1 / 6) return p + (q - p) * 6 * t;
+    if (t < 1 / 2) return q;
+    if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+    return p;
+  };
+  return [hue(h + 1 / 3), hue(h), hue(h - 1 / 3)].map((v) => Math.round(Math.min(1, Math.max(0, v)) * 255));
+}
+
+/** Repaint one swatch, keeping the light-to-dark shape the pack paints into it. */
+function paintCell(g, W, H, cell, hex) {
+  const [cx, cy] = cell.split(",").map(Number);
+  const w = W / 8, h = H / 4, x = cx * w, y = cy * h;
+  const base = new THREE.Color(hex), hsl = {};
+  base.getHSL(hsl);
+  const top = new THREE.Color().setHSL(hsl.h, hsl.s, Math.min(0.97, hsl.l * 1.28));
+  const bottom = new THREE.Color().setHSL(hsl.h, hsl.s * 1.05 > 1 ? 1 : hsl.s * 1.05, hsl.l * 0.55);
+  const grad = g.createLinearGradient(0, y, 0, y + h);
+  grad.addColorStop(0, `#${top.getHexString()}`);
+  grad.addColorStop(1, `#${bottom.getHexString()}`);
+  g.fillStyle = grad;
+  g.fillRect(x, y, w, h);
+}
+
+const repainted = new Map();
+/**
+ * Build a character's texture: optionally push every pixel through a recipe rule
+ * (that is what makes the Vampire), then stamp the wardrobe's chosen colours into
+ * their own swatches. Cached, so 25 players sharing a look share one texture.
+ */
+function repaint(source, recipe, cells) {
+  const key = `${recipe ?? "-"}|${Object.entries(cells ?? {}).sort().join()}|${source.uuid}`;
+  if (repainted.has(key)) return repainted.get(key);
+
+  const img = source.image;
+  const c = document.createElement("canvas");
+  c.width = img.width; c.height = img.height;
+  const g = c.getContext("2d", { willReadFrequently: true });
+  g.drawImage(img, 0, 0);
+
+  if (recipe) {
+    const frame = g.getImageData(0, 0, c.width, c.height), px = frame.data;
+    const { rule } = RECOLORS[recipe];
+    for (let i = 0; i < px.length; i += 4) {
+      const [h, s, l] = rgbToHsl(px[i], px[i + 1], px[i + 2]);
+      const [R, G, B] = hslToRgb(...rule(h, s, l));
+      px[i] = R; px[i + 1] = G; px[i + 2] = B;
+    }
+    g.putImageData(frame, 0, 0);
+  }
+  for (const [cell, hex] of Object.entries(cells ?? {})) paintCell(g, c.width, c.height, cell, hex);
+
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.flipY = false;                       // glTF textures are already the right way up
+  t.wrapS = source.wrapS; t.wrapT = source.wrapT;
+  t.needsUpdate = true;
+  repainted.set(key, t);
+  return t;
+}
+
+/** The wardrobe, as cell -> colour. Empty entries leave the pack's own colour. */
+function wardrobeCells() {
+  const out = {};
+  for (const [slot, cell] of Object.entries(SLOT_CELL)) {
+    if (wardrobe[slot]) out[cell] = wardrobe[slot];
+  }
+  if (wardrobe.outfit && state.character.outfit) out[state.character.outfit] = wardrobe.outfit;
+  return out;
+}
+
+/* ── loading ───────────────────────────────────────────────────────────── */
+const loader = new GLTFLoader();
+const cache = new Map();
+const load = (url) => cache.get(url) ?? (cache.set(url, loader.loadAsync(url)), cache.get(url));
+
+/* ── the arena dressing, from the Dungeon pack ─────────────────────────── */
+const arenaGroup = new THREE.Group();
+scene.add(arenaGroup);
+let arenaBuilt = false;
+
+/** [file, how many, the radius band they scatter in] */
+const ARENA_PLAN = [
+  ["pillar_decorated.gltf",    8, [11.5, 11.5], 4.2],
+  ["barrel_large.gltf",        7, [5, 10],      1.1],
+  ["box_large.gltf",           6, [4, 10],      0.95],
+  ["crates_stacked.gltf",      4, [6, 10.5],    1.6],
+  ["banner_patternA_red.gltf", 4, [12.6, 12.6], 2.6],
+  ["rubble_half.gltf",         5, [3, 9],       0.7],
+];
+
+async function buildArena() {
+  if (arenaBuilt) return;
+  arenaBuilt = true;
+  const box = new THREE.Box3();
+  for (const [file, count, [rMin, rMax], tall] of ARENA_PLAN) {
+    /* the Dungeon pack ships its binaries as "<name>.gltf.glb" */
+    const gltf = await load(`${DUNGEON}${file}.glb`);
+    /* it is also modelled to a much larger grid than the characters, so every
+       prop is scaled to a height that reads next to a ~1.7 m person. */
+    const native = box.setFromObject(gltf.scene).max.y - box.min.y;
+    const scale = native > 0 ? tall / native : 1;
+    for (let i = 0; i < count; i++) {
+      const o = gltf.scene.clone(true);
+      const ring = rMin === rMax;
+      const a = (i / count) * Math.PI * 2 + (ring ? 0 : Math.random() * 6);
+      const r = rMin + Math.random() * (rMax - rMin);
+      o.scale.setScalar(scale);
+      o.position.set(Math.cos(a) * r, 0, Math.sin(a) * r);
+      o.rotation.y = ring ? -a : Math.random() * Math.PI * 2;
+      o.traverse((m) => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });
+      arenaGroup.add(o);
+    }
+  }
+}
+
+/* ── the cast on stage ─────────────────────────────────────────────────── */
+const stage = new THREE.Group();
+scene.add(stage);
+let actors = [];
+let clipsOf = [];
+const state = { character: CHARACTERS[0], anim: "Idle", weapon: WEAPONS[1][1], crowd: 1, toon: false, arena: false };
+/** null in a slot = keep whatever the pack shipped. */
+const wardrobe = { skin: null, hair: null, eyes: null, outfit: null, hat: null };
+
+function outlineFor(mesh) {
+  const mat = new THREE.MeshBasicMaterial({ color: 0x263140, side: THREE.BackSide });
+  mat.onBeforeCompile = (s) => {
+    s.vertexShader = s.vertexShader.replace(
+      "#include <begin_vertex>",
+      "#include <begin_vertex>\n  transformed += objectNormal * 0.025;",
+    );
+  };
+  const out = new THREE.SkinnedMesh(mesh.geometry, mat);
+  out.bind(mesh.skeleton, mesh.bindMatrix);
+  out.frustumCulled = false;
+  return out;
+}
+
+function dressActor(root, tint) {
+  const outlines = [];
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    if (BUILT_IN_GEAR.test(o.name)) { o.visible = false; return; }
+    /* a chosen hat replaces the one the character was modelled wearing */
+    if (wardrobe.hat && /Hat|Helmet/i.test(o.name)) { o.visible = false; return; }
+    o.castShadow = true;
+    o.receiveShadow = true;
+    o.frustumCulled = false;
+    const recipe = state.character.recolor;
+    const flat = recipe && RECOLORS[recipe].parts.find(([re]) => re.test(o.name))?.[1];
+    const src = o.material.map;
+    const cells = wardrobeCells();
+    const dressed = recipe || Object.keys(cells).length > 0;
+    const map = flat ? null : (src && dressed ? repaint(src, recipe, cells) : src);
+    const color = flat ? new THREE.Color(flat).multiply(tint) : tint;
+    o.material = state.toon
+      ? new THREE.MeshToonMaterial({ map, gradientMap: RAMP, color })
+      : new THREE.MeshStandardMaterial({ map, color, roughness: 0.75, metalness: 0 });
+    if (state.toon && o.isSkinnedMesh) outlines.push([o.parent, outlineFor(o)]);
+  });
+  for (const [parent, out] of outlines) parent.add(out);   // never mutate mid-traverse
+}
+
+/**
+ * Lift a hat off one character and drop it on another.
+ *
+ * Every character in both packs rides the same 41-bone rig, so a hat modelled for
+ * the Knight sits correctly on the Mage — but its geometry is authored in the
+ * BIND pose, in model space. `boneInverses[head]` is exactly the matrix that takes
+ * model space into that bone's space, so applying it puts the hat on the head and
+ * lets the head carry it from then on.
+ */
+async function attachHat(root, hat) {
+  const source = (await load(hat.url)).scene.getObjectByName(hat.mesh);
+  if (!source) return;
+
+  /* The pack hangs every loose piece straight off a bone — hats on `head`, capes
+     on `chest`, weapons on `handslot.r` — so the geometry is ALREADY in that
+     bone's space. Wearing it on another character is just re-parenting it to the
+     same bone, because every character rides the same 41-bone rig. */
+  const boneName = source.parent?.isBone ? source.parent.name : "head";
+  const bone = root.getObjectByName(boneName);
+  if (!bone) return;
+
+  const worn = new THREE.Mesh(source.geometry, source.material.clone());
+  worn.position.copy(source.position);
+  worn.quaternion.copy(source.quaternion);
+  worn.scale.copy(source.scale);
+  worn.castShadow = true;
+  worn.frustumCulled = false;
+  bone.add(worn);
+}
+
+async function rebuild() {
+  for (const a of actors) stage.remove(a.root);
+  actors = [];
+
+  const gltf = await load(state.character.url);
+  clipsOf = gltf.animations;
+  fillAnimList();
+
+  const weapon = state.weapon ? (await load(state.weapon)).scene : null;
+  const n = state.crowd;
+  const cols = Math.ceil(Math.sqrt(n));
+  const gap = 1.9;
+
+  for (let i = 0; i < n; i++) {
+    const root = skeletonClone(gltf.scene);
+    const tint = new THREE.Color(n === 1 ? "#ffffff" : PLAYER_COLORS[i % PLAYER_COLORS.length])
+      .lerp(new THREE.Color("#ffffff"), 0.45);
+    dressActor(root, tint);
+
+    if (weapon) {
+      /* GLTFLoader strips dots from node names: handslot.r -> handslotr */
+      const slot = root.getObjectByName("handslotr") ?? root.getObjectByName("handslot.r");
+      if (slot) {
+        const w = weapon.clone(true);
+        w.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
+        slot.add(w);
+      }
+    }
+
+    if (wardrobe.hat) await attachHat(root, wardrobe.hat);
+
+    if (n > 1) {
+      root.position.set(
+        (i % cols - (cols - 1) / 2) * gap,
+        0,
+        (Math.floor(i / cols) - (Math.ceil(n / cols) - 1) / 2) * gap,
+      );
+      root.rotation.y = ISO_YAW + (Math.random() - 0.5) * 1.2;
+    } else {
+      root.rotation.y = ISO_YAW + 0.35;
+    }
+
+    stage.add(root);
+    actors.push({ root, mixer: new THREE.AnimationMixer(root), action: null });
+  }
+
+  playAnim(state.anim);
+  framing = n > 9 ? MATCH : PLAZA;
+  document.getElementById("count").textContent = String(n);
+}
+
+function playAnim(name) {
+  const clip = clipsOf.find((c) => c.name === name)
+    ?? clipsOf.find((c) => c.name === "Idle")
+    ?? clipsOf[0];
+  if (!clip) return;
+  state.anim = clip.name;
+  document.getElementById("anim").value = clip.name;
+  for (const a of actors) {
+    a.action?.stop();
+    a.action = a.mixer.clipAction(clip);
+    a.action.reset().play();
+    a.action.time = Math.random() * clip.duration;   // so 25 people don't breathe in lockstep
+  }
+}
+
+/* ── controls ──────────────────────────────────────────────────────────── */
+function chips(host, items, isOn, onPick, cls = "") {
+  host.querySelectorAll("button").forEach((b) => b.remove());
+  for (const [label, value, extra] of items) {
+    const b = document.createElement("button");
+    b.textContent = label;
+    if (extra) b.className = cls;
+    b.setAttribute("aria-pressed", String(isOn(value)));
+    b.onclick = async () => { await onPick(value); redrawChips(); };
+    host.appendChild(b);
+  }
+}
+/** A colour slot: one "keep the pack's own colour" chip, then the palette. */
+function swatches(host, colours, current, onPick) {
+  host.querySelectorAll("button").forEach((b) => b.remove());
+  for (const hex of [null, ...colours]) {
+    const b = document.createElement("button");
+    b.className = hex ? "sw" : "sw keep";
+    if (hex) b.style.background = hex;
+    b.title = hex ?? "สีเดิมของตัวละคร";
+    b.setAttribute("aria-pressed", String(hex === current));
+    b.onclick = async () => { await onPick(hex); redrawChips(); };
+    host.appendChild(b);
+  }
+}
+
+function redrawChips() {
+  swatches(document.getElementById("skin"), SKIN_TONES, wardrobe.skin,
+    async (v) => { wardrobe.skin = v; await rebuild(); });
+  swatches(document.getElementById("hair"), HAIR_TONES, wardrobe.hair,
+    async (v) => { wardrobe.hair = v; await rebuild(); });
+  swatches(document.getElementById("eyes"), EYE_TONES, wardrobe.eyes,
+    async (v) => { wardrobe.eyes = v; await rebuild(); });
+  swatches(document.getElementById("outfit"), OUTFIT_DYES, wardrobe.outfit,
+    async (v) => { wardrobe.outfit = v; await rebuild(); });
+  chips(document.getElementById("hat"), HATS,
+    (v) => v === wardrobe.hat, async (v) => { wardrobe.hat = v; await rebuild(); });
+  chips(document.getElementById("chars"),
+    CHARACTERS.map((c) => [c.label, c, c.bone]),
+    (v) => v.id === state.character.id,
+    async (v) => { state.character = v; await rebuild(); }, "bone");
+  chips(document.getElementById("weapons"), WEAPONS,
+    (v) => v === state.weapon, async (v) => { state.weapon = v; await rebuild(); });
+  chips(document.getElementById("crowd"), [["1", 1], ["5", 5], ["12", 12], ["25", 25]],
+    (v) => v === state.crowd, async (v) => { state.crowd = v; await rebuild(); });
+  document.getElementById("toon").setAttribute("aria-pressed", String(state.toon));
+  document.getElementById("arena").setAttribute("aria-pressed", String(state.arena));
+}
+function fillAnimList() {
+  const sel = document.getElementById("anim");
+  sel.innerHTML = "";
+  const have = new Set(clipsOf.map((c) => c.name));
+  const ordered = [...FAVOURITE_ANIMS.filter((n) => have.has(n)),
+                   ...clipsOf.map((c) => c.name).filter((n) => !FAVOURITE_ANIMS.includes(n))];
+  for (const name of ordered) {
+    const o = document.createElement("option");
+    o.value = o.textContent = name;
+    sel.appendChild(o);
+  }
+  sel.onchange = () => playAnim(sel.value);
+}
+
+document.getElementById("toon").onclick = async () => { state.toon = !state.toon; await rebuild(); redrawChips(); };
+document.getElementById("arena").onclick = async () => {
+  state.arena = !state.arena;
+  if (state.arena) await buildArena();
+  arenaGroup.visible = state.arena;
+  redrawChips();
+};
+
+let dragging = false, lastX = 0;
+renderer.domElement.addEventListener("pointerdown", (e) => { dragging = true; lastX = e.clientX; });
+addEventListener("pointerup", () => { dragging = false; });
+addEventListener("pointermove", (e) => { if (dragging) { yaw -= (e.clientX - lastX) * 0.008; lastX = e.clientX; } });
+addEventListener("resize", () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+/* ── loop ──────────────────────────────────────────────────────────────── */
+const clock = new THREE.Clock();
+let frames = 0, acc = 0;
+const fpsEl = document.getElementById("fps"), callsEl = document.getElementById("calls"),
+      trisEl = document.getElementById("tris"), verdictEl = document.getElementById("verdict");
+
+renderer.setAnimationLoop(() => {
+  const dt = clock.getDelta();
+  for (const a of actors) a.mixer.update(dt);
+
+  const spread = state.crowd > 9 ? 1.55 : 1;
+  camera.position.set(
+    camTarget.x + Math.sin(yaw) * framing.distance * spread,
+    framing.height * spread,
+    camTarget.z + Math.cos(yaw) * framing.distance * spread,
+  );
+  camera.lookAt(camTarget);
+  renderer.render(scene, camera);
+
+  frames++; acc += dt;
+  if (acc >= 0.5) {
+    const fps = Math.round(frames / acc);
+    frames = 0; acc = 0;
+    fpsEl.textContent = String(fps);
+    callsEl.textContent = String(renderer.info.render.calls);
+    trisEl.textContent = renderer.info.render.triangles.toLocaleString();
+    const ok = fps >= 50, meh = fps >= 30;
+    verdictEl.textContent = ok ? "✅ ลื่นสบาย" : meh ? "🟡 พอเล่นได้" : "🔴 กระตุก";
+    verdictEl.style.color = ok ? "#2e7d32" : meh ? "#b26a00" : "#c62828";
+  }
+});
+
+arenaGroup.visible = false;
+redrawChips();
+await rebuild();
+document.getElementById("loading").remove();
+window.__bench = { actors, stage, arenaGroup, scene, THREE, state };
+</script>
+</body>
+</html>
