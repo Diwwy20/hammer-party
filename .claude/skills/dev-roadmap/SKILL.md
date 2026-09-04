@@ -181,11 +181,11 @@ something real to do after you die.
   25-device load test matters more than it did.
 - 📦 `feat(presentation): cover art, animated characters, dressed arena, weather events, ghosts`
 
-## 🎉 All phases (00–05 + 3D-lobby refactor + architecture pass) complete — remaining work is event-day hardening (real 25-device load test, dress rehearsal, LAN fallback, reconnection on flaky wifi).
+## 🎉 Phases 00–06 complete. Remaining event-day hardening: dress rehearsal, LAN fallback, reconnection on flaky wifi, and the 25-device load test — which the owner has WAIVED as a phase gate.
 
 ---
 
-## 🚧 Phases 06–10 — replacing the procedural 3D with authored models (PLANNED, not started)
+## Phases 06–10 — replacing the procedural 3D with authored models
 
 The owner rejected the hand-built character a third time. The conclusion is that primitives have a
 ceiling — no hair, no cloth, no face — so characters, weapons, cosmetics and the map move to
@@ -194,17 +194,43 @@ ceiling — no hair, no cloth, no face — so characters, weapons, cosmetics and
 **The plan is written in full. Read it before scoping any of this:**
 [docs/plans/phases-06-10-model-characters.md](../../../docs/plans/phases-06-10-model-characters.md)
 
-- **06** — one KayKit character walking in-game, idle + walk only. The phase that finally answers
-  "do 25 phones survive?". Nothing else changes and the server is not touched. **Start here.**
-- **07** — combat animation, with the swing clip time-scaled to that hammer's `cooldownMs` so the
-  visual contact frame lands on the server's hit.
+### Phase 06 — the character is an authored model ✅
+
+- `tools/model-pipeline/strip-clips.mjs`: a dependency-free GLB rewriter keeping the nine clips the
+  game plays and pruning everything nothing references any more — 3.5 MB → ~0.7 MB per character,
+  because ~90% of a pack character is 76 animations we never use. Output in `client/public/models/`.
+- `three/ModelCharacter.tsx`: loaded once, cloned per player with `SkeletonUtils.clone` (bone hierarchy
+  duplicated, geometry and materials SHARED), pack materials taken through the existing toon ramp,
+  built-in swords and shields hidden, **only the torso casting a real shadow** (19 draw calls → 11).
+- `PlayerAvatar` drives an `AnimationMixer` for idle/walk/run/float. The walk stays **distance-driven** —
+  it survives as the clip's `timeScale` — with the two pure decisions in `three/locomotion.ts` + tests.
+- The hammer hangs off `handslot.r`, undoing the bone's world scale.
+- **The open colour decision was settled**: characters keep their own colours, and identity is the
+  floor ring + the nameplate. A body tint fights the character it is painted over.
+- Measured in-browser: **11 draw calls, ~6.1k triangles per player** against 700+ draw calls at 25
+  players for the old avatar (~320 extrapolated).
+- ⚠️ Its stated gate — 25 phones at ≥30 fps — was **waived by the owner** and moved to event-day
+  hardening. Nothing in 07–10 waits on it.
+- 📦 `feat(characters): replace the procedural rig with authored KayKit models`
+
+### Phase 07 — combat animation 🚧 NEXT
+
+- Swing / hit / death / ghost clips with cross-fades.
+- **The landmine:** a canned swing clip has a fixed length; the game derives swing length from that
+  hammer's `cooldownMs`. Time-scale the clip so the visual contact frame lands on the server's hit
+  moment, or players will feel hits that "don't count".
+- Fire the existing `Impact.tsx` effects (squash, flash, star, ring, dust, sparks, floor fracture) at
+  the clip's contact frame.
+  ✅ Done when the swing reads as landing exactly when the server says it landed, and the e2e smoke
+  still passes.
+
+### Phases 08–10 ⬜
+
 - **08** — the wardrobe: add `characterIndex`, `hairIndex` becomes a colour, drop `faceIndex` and
   `backIndex`. First phase that changes the schema, so server clamping ships with a unit test.
 - **09** — the arena, keeping `StageConfig.obstacles` in step with the new props (invisible-wall risk).
-- **10** — delete the dead procedural code, tune draw calls, run the 25-device rehearsal.
-
-⚠️ One decision is open and blocks Phase 06: where player colour lives once players pick a character
-(recommended: characters keep their own colours, identity moves to the floor ring + nameplate).
+- **10** — delete the dead procedural code (`three/Character.tsx`, `three/cosmetics.tsx`, the face
+  textures, the dead `RIG` entries), tune draw calls, run the dress rehearsal.
 
 ---
 

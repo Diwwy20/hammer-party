@@ -118,28 +118,41 @@ Distilled project knowledge lives in `.claude/skills/`. Load only what a task ne
     not emoji. **HAIR is now a real cosmetic slot** (`hairIndex`, 12 tones, clamped server-side like the
     rest), and the hammer tab is a clearly-labelled PREVIEW, because hammers are found in the arena.
   - **The default look is the game's own character**: gold shirt, dark hair, black top hat with a RED brim.
-- 🚧 **NEXT UP — Phases 06–10: the procedural characters are being replaced by authored models.**
-  The owner rejected the hand-built look a third time; the conclusion is that primitives have a
-  ceiling (no hair, no cloth, no face), not that the code was bad. Decided, evidenced and planned in
-  **[docs/plans/phases-06-10-model-characters.md](docs/plans/phases-06-10-model-characters.md)** —
-  read it before touching `client/src/three/`. Headlines:
-  - **KayKit CC0 packs**, stylised low-poly (PEAK-ish, deliberately NOT Genshin). Roster of 6:
-    Knight · Barbarian · Rogue_Hooded · Mage · Skeleton_Minion · **Vampire** (the Rogue's mesh with
-    a repainted palette — no such model exists to download).
-  - The packs are **lighter than what we have**: 1 material and one 16 KB texture per character,
-    ~230 draw calls for 25 players against 700+ today.
-  - That texture is a **grid of flat swatches**, and every character samples the same cells —
-    `(0,0)` skin · `(1,0)` hair · `(2,0)` eyes — so one wardrobe repaints them all. Hats/capes/weapons
-    hang off bones (`head`, `chest`, `handslot.r`) on a shared 41-bone rig, so they swap between
-    characters by re-parenting. Hairstyles, mouths and eye shapes are NOT possible — colour only.
-  - **Start with Phase 06** (one character walking in-game, nothing else) because it finally answers
-    the 25-device question. One open decision is flagged at the top of the plan: where player colour
-    goes once players pick a character.
-  - `tools/asset-bench/` is the throwaway viewer used to decide all of this — not part of the product.
-- ⚠️ **Still owed (event-day hardening):** a real ~25-device load test (fps/latency) — the richer
-  character rig, dressed stage, backdrop and per-hit particles raise the draw-call count, so this matters
-  more than it did — plus a full dress rehearsal + LAN fallback, and reconnection tested on genuinely
-  flaky wifi.
+- ✅ **Phase 06 — model characters (DONE).** The procedural rig is gone from the arena; a character is now
+  an authored **KayKit CC0** model. Primitives had a ceiling — no hair, no cloth, no face — which is why the
+  hand-built look was rejected three times. Planned in
+  **[docs/plans/phases-06-10-model-characters.md](docs/plans/phases-06-10-model-characters.md)** — read it
+  before touching `client/src/three/`. What shipped:
+  - **The asset pipeline**: `tools/model-pipeline/strip-clips.mjs`, a dependency-free GLB rewriter that keeps
+    the nine clips the game plays and prunes every accessor and bufferView nothing references any more. Each
+    character drops 3.5 MB → ~0.7 MB, because ~90% of a pack character is 76 animations we never use. The
+    stripped `.glb`s live in `client/public/models/` (Knight · Barbarian · Rogue_Hooded · Mage ·
+    Skeleton_Minion); everyone wears the Knight until Phase 08 offers a choice.
+  - **The rig**: `three/ModelCharacter.tsx` loads once and clones per player with `SkeletonUtils.clone`, which
+    duplicates the bone hierarchy and SHARES geometry and materials — a crowd of 25 resolves to at most three
+    materials. Pack materials are converted to `MeshToonMaterial` through the existing ramp, built-in
+    swords/shields are hidden (the hammer is this game's only weapon), and **only the torso casts a real
+    shadow** — everything with `castShadow` is drawn twice, and that one change took a character from 19 draw
+    calls to 11.
+  - **The driver**: `PlayerAvatar` runs an `AnimationMixer` for idle/walk/run/float. The walk is still
+    **distance-driven** — it survives as the clip's `timeScale` — so feet keep up with a player being
+    interpolated or slid across a wet floor. The two pure decisions (which clip, how fast) are in
+    `three/locomotion.ts` with unit tests.
+  - The hammer hangs off the model's `handslot.r` bone, undoing the bone's world scale so a mallet stays a mallet.
+  - **Player colour is decided**: characters keep their own colours and identity lives on the **floor ring +
+    nameplate**. Once players pick a character a body tint fights the character it is painted over.
+  - Measured in the browser: **11 draw calls and ~6.1k triangles per player**, against 700+ draw calls at 25
+    players for the old avatar — roughly 320 draw calls extrapolated to a full room.
+  - `tools/asset-bench/` is the throwaway viewer that decided the pack — not part of the product.
+- 🚧 **NEXT UP — Phase 07: combat animation.** Swing · hit · death · ghost clips, cross-faded. The landmine:
+  a canned swing clip has a FIXED length while the game derives swing length from that hammer's
+  `cooldownMs`, so the clip has to be time-scaled for its contact frame to land on the server's hit moment —
+  otherwise players feel hits that "don't count". Every `Impact.tsx` effect then fires at that frame.
+  Phases 08 (wardrobe + the first schema change) · 09 (arena props) · 10 (delete the dead procedural code)
+  follow.
+- ⚠️ **Still owed (event-day hardening):** a real ~25-device load test (fps/latency), a full dress
+  rehearsal + LAN fallback, and reconnection tested on genuinely flaky wifi. **The owner has waived the
+  25-device test as a phase gate** — it is event-day work, not a blocker on Phases 07–10.
 - Styling is **Tailwind v4 + shadcn (Base UI)** — see `ui-conventions`.
 
 ## 🔑 Non-negotiable rules

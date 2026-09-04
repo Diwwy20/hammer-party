@@ -1,7 +1,7 @@
 # Phases 06–10 — replacing the procedural 3D with authored models
 
-Written 2026-09-04, after an evaluation session. **Nothing in `packages/` has been
-changed yet.** Everything below is decided, evidenced, and ready to build.
+Written 2026-09-04, after an evaluation session. Everything below is decided and
+evidenced. **Phase 06 has shipped** (see its section); 07 is next.
 
 Read this together with `.claude/skills/ui-conventions` and `.claude/skills/game-architecture`
 — the rules there still hold. This plan changes what the characters are MADE of, not
@@ -30,17 +30,14 @@ So the decision is to stop hand-building characters and use authored models.
 | The hammer | **Keep `three/Hammer.tsx`.** The pack has no hammer, and a lathe-turned mallet is one of the few things primitives do well. |
 | Persistence | None to worry about — there is **no `localStorage` for cosmetics** anywhere in the client. No migration. |
 
-### Still undecided — settle this before writing Phase 06 code
+### Settled in Phase 06 — where player colour goes
 
-**Where does player colour go?** Today 25 players are told apart by tinting the whole
-body. Once players pick a character, tinting fights the character (a green Vampire is
-not a Vampire).
-
-- *Recommended:* characters keep their own colours; identity moves to the **floor ring
-  (already exists) + nameplate (already exists)**.
-- *Alternative:* dye only the outfit swatch, leaving skin/hair/hat alone.
-
-This decides how Phase 06 writes its material code, so answer it first.
+**Characters keep their own colours. Identity is the floor ring + the nameplate**, both
+of which already existed. Tinting a whole body fights the character painted underneath
+it — a green Vampire is not a Vampire — and once players pick a character in Phase 08
+that fight is with something they chose. The alternative (dyeing only the outfit
+swatch) stays available: the atlas is a grid of flat cells, so it is a wardrobe
+feature, not a lost option.
 
 ---
 
@@ -118,28 +115,33 @@ The same hook takes our own hammer: `handslot.r`.
 Each is one branch, one commit, merged to `main` (the owner runs git; no
 `Co-Authored-By` trailer). Playable at every boundary.
 
-### Phase 06 — one new character standing in the real game 🔥 START HERE
+### Phase 06 — one new character standing in the real game ✅ SHIPPED
 
 **Goal:** a KayKit character replaces the procedural one, walking and standing.
 Nothing else changes.
 
-- Strip the chosen `.glb`s to ~8 clips (`Idle`, `Walking_A`, `Running_A`,
-  `2H_Melee_Attack_Chop`, `Hit_A`, `Death_A`, `Cheer`, one float for ghosts) and put
-  them in `packages/client/public/models/`.
-- New `three/ModelCharacter.tsx` replacing `three/Character.tsx`: load once, clone per
-  player with `SkeletonUtils.clone`, share one material.
-- `PlayerAvatar` drives an `AnimationMixer` for idle/walk only. Its nameplate, HP bar,
-  damage numbers and `Impact.tsx` calls stay exactly as they are.
-- Preload before the plaza appears (the loading splash already exists).
+Shipped as `feat(characters): replace the procedural rig with authored KayKit models`:
 
-**Do not touch:** swing/hit/death animation · cosmetics schema · the dressing room ·
-the arena · anything on the server.
+- `tools/model-pipeline/strip-clips.mjs` strips each `.glb` to nine clips (`Idle`,
+  `Walking_A`, `Running_A`, `2H_Melee_Attack_Chop`, `Hit_A`, `Death_A`,
+  `Death_A_Pose`, `Cheer`, `Jump_Idle`) — 3.5 MB → ~0.7 MB each. Output committed to
+  `packages/client/public/models/`.
+- `three/ModelCharacter.tsx` loads once and clones per player with
+  `SkeletonUtils.clone`; materials are cached by source and look, so a room shares
+  them. Built-in swords and shields are hidden, and only the torso casts a real
+  shadow — 19 draw calls per character down to 11.
+- `PlayerAvatar` drives an `AnimationMixer` for idle/walk/run/float; the walk stays
+  distance-driven as the clip's `timeScale`, with `three/locomotion.ts` holding the
+  two pure decisions plus unit tests.
+- The hammer hangs off `handslot.r`, undoing the bone's world scale.
+- Player colour moved to the floor ring and the nameplate (see above).
 
-**Done when:** 25 players walk in the plaza **on a real phone at ≥30 fps**, and
-`pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm test:e2e` are all green.
+**Measured:** 11 draw calls and ~6.1k triangles per player, against 700+ draw calls at
+25 players for the old avatar — about 320 extrapolated to a full room.
 
-**Why first:** it settles the 25-device question that has been outstanding since
-Phase 01. If it fails, every later phase changes.
+**Its stated gate — 25 phones at ≥30 fps — was WAIVED by the owner** and moved to
+event-day hardening. It cannot be run from a dev machine, the draw-call measurement
+answers the question it was asked to answer, and nothing in 07–10 depends on it.
 
 ### Phase 07 — combat animation
 
