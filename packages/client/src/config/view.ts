@@ -345,6 +345,101 @@ export const ZONE_FX = {
 } as const;
 
 /**
+ * The AUTHORED character: which `.glb` is worn, how big it is drawn, and how its
+ * canned clips are blended into a walk.
+ *
+ * The models are KayKit (CC0), stripped to the clips the game plays by
+ * `tools/model-pipeline/strip-clips.mjs` and served out of `public/models/`. Every
+ * one of them rides the SAME 41-bone rig, which is what lets one number scale all
+ * of them and one bone name find every hand.
+ */
+export const MODEL = {
+  /** where `strip-clips.mjs` puts its output, as the browser sees it */
+  dir: "/models/",
+  /** the character everybody wears until Phase 08 lets them choose one */
+  defaultId: "Knight",
+  /**
+   * ONE scale for every character — deliberately not a per-character height
+   * normalisation.
+   *
+   * They all ride the same rig, so they are the same person underneath and a Mage
+   * measures taller only because of his hat. Normalising each model to a target
+   * height would shrink his BODY to make room for that hat, and the roster would
+   * quietly stop being one cast standing on one floor. This number takes the pack's
+   * own proportions to roughly the 2.05m the camera, the arena and the nameplate
+   * were all built around.
+   */
+  scale: 0.85,
+  /** how long the mixer takes to cross-fade between two locomotion clips (seconds) */
+  fadeSeconds: 0.18,
+  /**
+   * How fast each locomotion clip was AUTHORED to travel (m/s at `timeScale` 1).
+   *
+   * The clip is then time-scaled by the character's real speed over this, which is
+   * the same distance-driven idea the hand-written walk used: the feet keep up with
+   * a player being interpolated, or slid across a rain-slicked floor by knockback,
+   * instead of skating along at a fixed cadence.
+   */
+  walkClipSpeed: 1.35,
+  runClipSpeed: 3.4,
+  /** slower than this (m/s) and the character is simply standing there */
+  idleAboveSpeed: 0.12,
+  /** faster than this (m/s) the walk gives way to the run */
+  runAboveSpeed: 2.9,
+  /** how far the clip's playback may be pushed before it reads as a fast-forward */
+  minTimeScale: 0.6,
+  maxTimeScale: 1.8,
+  /**
+   * The weapons and shields the pack builds into a character.
+   *
+   * They are hidden rather than deleted: the hammer is the ONLY weapon in this
+   * game, and a Knight who spawns holding a longsword he can never swing reads as
+   * a bug. Hats and helmets are left alone — those are the character.
+   */
+  builtInGear:
+    /Sword|Shield|Staff|Wand|Dagger|Knife|Throwable|Crossbow|Spellbook|Quiver|Blade|Axe|Arrow|Mug|Turret/i,
+  /**
+   * The one mesh on a character that casts a real shadow.
+   *
+   * Everything with `castShadow` is drawn TWICE — once into the shadow map, once for
+   * the camera — so a character built from eight meshes costs sixteen draws before
+   * anything else. At 25 players the shadow map is the first thing to cost real
+   * frames on a phone, and a head, a cape, an arm or a leg never casts a shadow the
+   * torso was not already casting at this camera height. Every character is grounded
+   * by its painted contact blob anyway, which is sharper than the map and free.
+   *
+   * If a future character has no mesh matching this, every mesh casts rather than
+   * none — a shadowless character is a bug you notice late.
+   */
+  shadowCaster: /_Body$/i,
+  /** `GLTFLoader` strips dots from node names, so `handslot.r` arrives as this */
+  handSlotBone: "handslotr",
+} as const;
+
+/**
+ * The clips the stripped `.glb` still carries.
+ *
+ * A closed set of strings that gets compared, so it is a named const rather than a
+ * literal typed out at each call site — but a PRESENTATION one: these are asset
+ * names, they never go on the wire, and the server has never heard of them.
+ */
+export const MODEL_CLIP = {
+  Idle: "Idle",
+  Walk: "Walking_A",
+  Run: "Running_A",
+  Swing: "2H_Melee_Attack_Chop",
+  Hit: "Hit_A",
+  Death: "Death_A",
+  /** the frozen last frame of `Death_A` — a POSE, so its duration is zero */
+  DeathPose: "Death_A_Pose",
+  Cheer: "Cheer",
+  /** the airborne pose a ghost drifts in */
+  Float: "Jump_Idle",
+} as const;
+
+export type ModelClip = (typeof MODEL_CLIP)[keyof typeof MODEL_CLIP];
+
+/**
  * The cute low-poly character, as measured anchor points (metres, model space).
  *
  * Every mesh — body parts, hats, glasses, backpacks, the held hammer — positions

@@ -7,6 +7,7 @@ import { SPLASH } from "./config/view";
 import { GameCover } from "./components/GameCover";
 import { JoinScreen } from "./screens/JoinScreen";
 import { GameScreen } from "./screens/GameScreen";
+import { preloadCharacters } from "./three/ModelCharacter";
 
 /**
  * Screen routing. Everything is driven by the connection lifecycle (`conn`) plus the
@@ -16,6 +17,15 @@ import { GameScreen } from "./screens/GameScreen";
 export function App() {
   const conn = useGame((s) => s.conn);
   const booted = useGame((s) => s.booted);
+
+  /**
+   * Start pulling the character model down the moment the app opens.
+   *
+   * Typing a name and waiting on the splash is dead time that the download can have
+   * for free, and it is the difference between walking into a furnished plaza and
+   * watching 25 people fade in one by one on party wifi.
+   */
+  useEffect(() => preloadCharacters(), []);
 
   if (conn === Conn.Idle) return <JoinScreen />;
   if (conn === Conn.Error) return <ErrorScreen />;

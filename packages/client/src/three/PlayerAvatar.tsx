@@ -1,25 +1,22 @@
-import { useRef, useState, type MutableRefObject } from "react";
+import { useEffect, useRef, type MutableRefObject } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Html } from "@react-three/drei";
 import {
   Quaternion,
+  Vector3,
   type Camera,
   type Group,
   type Mesh,
   type MeshBasicMaterial,
-  type MeshToonMaterial,
   type Points,
 } from "three";
 import {
-  DEFAULT_BACK_INDEX,
   DEFAULT_COLOR_INDEX,
-  DEFAULT_FACE_INDEX,
-  DEFAULT_HAIR_INDEX,
   DEFAULT_HAMMER,
-  DEFAULT_HAT_INDEX,
   HAMMERS,
   HP_MAX,
   HammerKind,
+  PLAYER_COLORS,
   approach,
   clamp,
   clamp01,
@@ -35,15 +32,18 @@ import {
   COMBAT_FX,
   GHOST_FX,
   HAMMER,
-  LOD,
+  MODEL,
+  MODEL_CLIP,
   NAMEPLATE,
   RIG,
+  type ModelClip,
 } from "../config/view";
 import { PRANK_COPY } from "../config/copy";
 import { IMPACT_COLORS, hammerStyle, hpColor, hpRatio } from "../config/theme";
-import { Character, type CharacterHandles } from "./Character";
+import { ModelCharacter, type ModelCharacterHandles } from "./ModelCharacter";
+import { locomotionClip, locomotionTimeScale } from "./locomotion";
 import { Sparks, animateSparks } from "./Impact";
-import { FaceExpression, burstTexture, faceTexture, slashTexture } from "./textures";
+import { burstTexture, slashTexture } from "./textures";
 import { HammerModel } from "./Hammer";
 import type { SelfTransform } from "./types";
 
@@ -56,17 +56,21 @@ import type { SelfTransform } from "./types";
  * the swing, the hit, the ghost float and the death poof are all things the client
  * works out for itself, and none of it is synced by design.
  *
- * Three ideas do most of the work:
+ * Two ideas do most of the work:
  *
- *   - **The walk is driven by DISTANCE TRAVELLED**, not by a timer, so the legs
- *     always match the real speed — walking, being interpolated, or sliding across
- *     a rain-slicked floor after a hit.
- *   - **The swing is a four-beat blow**, not a wave: wind up, strike, HOLD on the
- *     frame of contact, recover. The hold is hit-stop, and it is the difference
- *     between an arm passing through a target and an arm hitting one.
- *   - **Everything loose lags.** The head, the hair and the scarf are dragged along
- *     behind the body rather than animated with it, which is what stops 25 people
- *     reading as 25 objects being slid around a floor.
+ *   - **The walk is driven by DISTANCE TRAVELLED**, not by a timer. The clips are
+ *     canned now rather than hand-written, so this survives as the mixer's
+ *     `timeScale`: playback is the body's real speed over the speed the clip was
+ *     authored for. The legs keep up whether the player is walking, being
+ *     interpolated toward a new position, or sliding across a rain-slicked floor.
+ *   - **The blow's FX are the client's own business.** The squash, the smear, the
+ *     star, the ring, the dust, the sparks and the floor fracture are all worked
+ *     out here from broadcast timestamps and never synced.
+ *
+ * The swing, hit and death ANIMATIONS are Phase 07 — the model's own clips will
+ * replace the four-beat arm the primitives used, time-scaled so the contact frame
+ * lands on the server's hit moment. Until then the character walks, stands and
+ * carries its hammer, and everything else on screen is unchanged.
  */
 export function PlayerAvatar({
   id,
@@ -84,9 +88,9 @@ export function PlayerAvatar({
   self: MutableRefObject<SelfTransform>;
 }) {
   const root = useRef<Group>(null);
-  const rig = useRef<CharacterHandles>(null);
-  const hammerArm = useRef<Group>(null);
-  const hammerWrist = useRef<Group>(null);
+  const rig = useRef<ModelCharacterHandles>(null);
+  /** the hammer's own group, re-parented onto the model's right-hand bone */
+  const hammer = useRef<Group>(null);
   const trail = useRef<Mesh>(null);
   const star = useRef<Mesh>(null);
   const ring = useRef<Mesh>(null);
@@ -98,20 +102,12 @@ export function PlayerAvatar({
   const drainBar = useRef<HTMLDivElement>(null);
   const drain = useRef(1);
 
-  /** walk-cycle phase (radians), advanced by distance travelled */
-  const stride = useRef(0);
-  /** smoothed ground speed (m/s) — the blend factor for the whole walk animation */
+  /** smoothed ground speed (m/s) — what picks the clip and how fast it plays */
   const speed = useRef(0);
   /** last sampled position, for measuring that speed */
   const previous = useRef<{ x: number; z: number } | null>(null);
-  /** when this character next blinks — staggered per player, never in unison */
-  const nextBlinkAt = useRef(scheduleBlink(0));
-  /** how far the head, the hair and the scarf are still behind the body (radians) */
-  const headLag = useRef(0);
-  const hairLag = useRef(0);
-  const scarfLag = useRef(0);
-  /** the facing we drew last frame, for measuring that turn */
-  const previousDir = useRef(0);
+  /** the locomotion clip currently faded in, so a cross-fade only happens on a change */
+  const playing = useRef<ModelClip | null>(null);
   /** the swing we have already cracked the floor for — one fracture per blow, not one per frame */
   const crackedFor = useRef(0);
   /** this frame's HP ratio, so the drain animation can read it without a re-render */
@@ -124,21 +120,37 @@ export function PlayerAvatar({
   const hammerKind = usePlayerField(id, (p) => p?.hammer ?? DEFAULT_HAMMER);
   /** what that hammer looks like — including the colour it smears through the air */
   const weapon = hammerStyle(hammerKind);
-  const cosmetic = {
-    colorIndex: usePlayerField(id, (p) => p?.colorIndex ?? DEFAULT_COLOR_INDEX),
-    hairIndex: usePlayerField(id, (p) => p?.hairIndex ?? DEFAULT_HAIR_INDEX),
-    hatIndex: usePlayerField(id, (p) => p?.hatIndex ?? DEFAULT_HAT_INDEX),
-    faceIndex: usePlayerField(id, (p) => p?.faceIndex ?? DEFAULT_FACE_INDEX),
-    backIndex: usePlayerField(id, (p) => p?.backIndex ?? DEFAULT_BACK_INDEX),
-  };
+  /**
+   * The player's own colour.
+   *
+   * It no longer touches the BODY. Once players pick their own character a tint
+   * fights the character it is painted over — a green Vampire is not a Vampire — so
+   * identity moved to the floor ring and the nameplate, and this is what colours
+   * them. The rest of the wardrobe waits for Phase 08.
+   */
+  const colorIndex = usePlayerField(id, (p) => p?.colorIndex ?? DEFAULT_COLOR_INDEX);
+  const tint = PLAYER_COLORS[colorIndex] ?? PLAYER_COLORS[0];
 
   /**
-   * Whether this character is close enough to be worth its fine detail. It is React
-   * state rather than a `visible` flag because the cheapest mesh is the one that was
-   * never built: far-off players simply do not have the parts. The two `LOD`
-   * distances differ, so standing on the line cannot rebuild the trim every frame.
+   * Hang the hammer off the model's right hand.
+   *
+   * The pack parents every loose piece straight to a bone, so this is re-parenting
+   * and nothing more — but the bone lives under a model scaled by `MODEL.scale`,
+   * and the hammer was modelled at world size. Undoing the bone's world scale is
+   * what keeps a mallet a mallet instead of a toy or a lamppost.
    */
-  const [detail, setDetail] = useState(true);
+  useEffect(() => {
+    const slot = rig.current?.handSlot;
+    const held = hammer.current;
+    if (!slot || !held) return;
+
+    slot.getWorldScale(HAND_SCALE);
+    held.scale.setScalar(HAND_SCALE.x > 0 ? 1 / HAND_SCALE.x : 1);
+    slot.add(held);
+    return () => {
+      slot.remove(held);
+    };
+  }, [alive, hammerKind]);
 
   useFrame((state, dt) => {
     const group = root.current;
@@ -151,48 +163,21 @@ export function PlayerAvatar({
       group.rotation.y = pose.dir;
       speed.current +=
         (measureSpeed(previous, pose, dt) - speed.current) * approach(ANIM.speedEaseRate, dt);
-      // everything loose keeps the OLD heading for a beat, then catches the body up
-      const turned = angleDelta(previousDir.current, pose.dir);
-      headLag.current -= turned;
-      hairLag.current -= turned;
-      scarfLag.current -= turned;
-      previousDir.current = pose.dir;
     }
-    headLag.current -= headLag.current * approach(ANIM.headLagRate, dt);
-    hairLag.current -= hairLag.current * approach(ANIM.hairLagRate, dt);
-    scarfLag.current -= scarfLag.current * approach(ANIM.scarfLagRate, dt);
 
     const now = performance.now();
     const time = state.clock.elapsedTime;
-    const walk = clamp01(speed.current / ANIM.fullSpeed);
-    stride.current += speed.current * ANIM.stepsPerMetre * dt * Math.PI * 2;
 
     // a ghost floats instead of walking, and never swings
     const floating = !alive;
     const swing = floating ? null : swingPose(swingAt[id], now, hammerKind);
 
-    animateBody(rig.current, {
-      walk,
-      stride: stride.current,
-      time,
-      squash: pulse(hitAt[id], now, COMBAT_FX.squashMs),
-      headLag: headLag.current,
-      hairLag: hairLag.current,
-      scarfLag: scarfLag.current,
-      floating,
-    });
-    animateSwing(rig.current, hammerArm.current, hammerWrist.current, swing);
+    animateLocomotion(rig.current, playing, floating ? 0 : speed.current, floating, dt);
 
     group.position.y = floating
       ? GHOST_FX.hoverM + Math.sin(time * GHOST_FX.bobRate) * GHOST_FX.bobM
       : 0;
 
-    animateFace(rig.current, nextBlinkAt, now, {
-      hurt: pulse(hitAt[id], now, ANIM.hurtFaceMs) >= 0,
-      fierce: !!swing && swing.effort > 0,
-      ghost: floating,
-    });
-    animateFlash(rig.current, hitAt[id], now);
     animateShadow(rig.current, group.position.y);
     animateTrail(trail.current, swing, state.camera);
     animateStar(star.current, hitAt[id], now, state.camera);
@@ -214,11 +199,6 @@ export function PlayerAvatar({
         group.position.z + Math.cos(group.rotation.y) * reach,
       );
     }
-
-    // near enough to be worth its trim? (the gap between the two stops it flapping)
-    const distance = state.camera.position.distanceTo(group.position);
-    if (detail && distance > LOD.detailOutM) setDetail(false);
-    else if (!detail && distance < LOD.detailInM) setDetail(true);
   });
 
   const ratio = hpRatio(hp, HP_MAX);
@@ -229,17 +209,16 @@ export function PlayerAvatar({
 
   return (
     <group ref={root}>
-      <Character
+      <ModelCharacter
         ref={rig}
-        cosmetic={cosmetic}
-        detail={detail}
         isMe={isMe}
+        ringColor={tint}
         ghost={ghost}
         ghostOpacity={isMe ? GHOST_FX.selfOpacity : GHOST_FX.opacity}
       />
 
       {/* the hammer rides in the right hand; a ghost has put it down */}
-      {!ghost && <HeldHammer armRef={hammerArm} wristRef={hammerWrist} kind={hammerKind} />}
+      {!ghost && <HeldHammer groupRef={hammer} kind={hammerKind} />}
       {!ghost && <SwingTrail meshRef={trail} color={weapon.trail} />}
       <HitStar meshRef={star} />
       <ShockRing meshRef={ring} />
@@ -325,14 +304,6 @@ function pulse(startedAt: number | undefined, now: number, durationMs: number): 
   return progress >= 0 && progress <= 1 ? progress : -1;
 }
 
-/** The shortest way round from one heading to another (radians, -π…π). */
-function angleDelta(from: number, to: number): number {
-  const raw = (to - from) % (Math.PI * 2);
-  if (raw > Math.PI) return raw - Math.PI * 2;
-  if (raw < -Math.PI) return raw + Math.PI * 2;
-  return raw;
-}
-
 /** Ground speed (m/s) between this frame's pose and the last one. */
 function measureSpeed(
   previous: MutableRefObject<{ x: number; z: number } | null>,
@@ -345,172 +316,38 @@ function measureSpeed(
   return Math.hypot(pose.x - last.x, pose.z - last.z) / dt;
 }
 
-/**
- * The walk cycle, the idle breath, the hit squash and everything that trails behind
- * them, all blended by how fast the character is actually moving. A ghost skips the
- * legs entirely and just drifts.
- *
- * What sells a cartoon walk is not the legs — it is everything the legs make the
- * rest of the body do: the bounce, the roll from foot to foot, the counter-twist of
- * the shoulders, the squash on each footfall, the toe rolling off the floor, and
- * the hair and scarf arriving a beat late.
- */
-function animateBody(
-  rig: CharacterHandles | null,
-  {
-    walk,
-    stride,
-    time,
-    squash,
-    headLag,
-    hairLag,
-    scarfLag,
-    floating,
-  }: {
-    walk: number;
-    stride: number;
-    time: number;
-    squash: number;
-    headLag: number;
-    hairLag: number;
-    scarfLag: number;
-    floating: boolean;
-  },
-): void {
-  if (!rig) return;
-
-  const swing = Math.sin(stride);
-  const counterSwing = Math.sin(stride + Math.PI);
-  /** one footfall per half-stride — the beat the bounce and the squash land on */
-  const footfall = Math.abs(swing);
-  const legLeft = swing * ANIM.legSwingRad * walk;
-  const legRight = counterSwing * ANIM.legSwingRad * walk;
-
-  if (rig.legLeft) rig.legLeft.rotation.x = legLeft;
-  if (rig.legRight) rig.legRight.rotation.x = legRight;
-  // the toe rolls off the floor behind and lifts a little in front
-  if (rig.footLeft) rig.footLeft.rotation.x = footRoll(legLeft);
-  if (rig.footRight) rig.footRight.rotation.x = footRoll(legRight);
-  // the hammer arm's rotation is owned by the swing, so only the free arm walks
-  if (rig.armLeft) {
-    rig.armLeft.rotation.x = counterSwing * ANIM.armSwingRad * walk;
-    rig.armLeft.rotation.z = -(RIG.arm.restSpreadRad + ANIM.armSpreadRad * walk);
-  }
-
-  if (rig.lean) {
-    rig.lean.position.set(0, floating ? 0 : footfall * ANIM.bobM * walk, 0);
-    rig.lean.rotation.x = floating ? Math.sin(time * 0.8) * 0.06 : ANIM.leanRad * walk;
-    // rolling from one foot to the other; a ghost just sways instead
-    rig.lean.rotation.z = floating
-      ? Math.sin(time * 0.6) * 0.08
-      : swing * ANIM.swayRad * walk +
-        Math.sin(time * ANIM.idleSwayRate) * ANIM.idleSwayRad * (1 - walk);
-  }
-
-  if (rig.torso) {
-    // idle breathing when still, a landing squash on each step, and a hard
-    // squash-and-stretch on the frame you're hit
-    const breath = Math.sin(time * ANIM.idleRate) * ANIM.idleScale * (1 - walk);
-    const land = (1 - footfall) * ANIM.footfallSquash * walk;
-    const hit = squash >= 0 ? Math.sin(squash * Math.PI) * COMBAT_FX.squashAmount : 0;
-    const total = breath + land + hit;
-    rig.torso.scale.set(1 + total, 1 - total, 1 + total);
-    // the shoulders counter the hips, which is what stops a walk reading as a slide
-    rig.torso.rotation.y = counterSwing * ANIM.twistRad * walk;
-  }
-
-  if (rig.head) {
-    // the walk's own little wobble, plus the slow tilt of somebody standing idle
-    rig.head.rotation.z =
-      swing * 0.05 * walk + Math.sin(time * ANIM.idleTiltRate) * ANIM.idleTiltRad * (1 - walk);
-    rig.head.rotation.y = clamp(headLag, -ANIM.headLagRad, ANIM.headLagRad) + swing * 0.05 * walk;
-    rig.head.position.y = floating ? Math.sin(time * 1.1) * 0.03 : 0;
-  }
-
-  // the hair arrives after the head does, and is pushed back by the running
-  if (rig.hair) {
-    rig.hair.rotation.y = clamp(hairLag, -ANIM.hairLagRad, ANIM.hairLagRad);
-    rig.hair.rotation.x = -ANIM.hairLagRad * walk * 0.5 + Math.abs(swing) * 0.04 * walk;
-  }
-  if (rig.cowlick) {
-    rig.cowlick.rotation.x = Math.sin(time * ANIM.cowlickRate) * ANIM.cowlickRad * (0.4 + walk);
-    rig.cowlick.rotation.z = Math.sin(time * ANIM.cowlickRate * 0.7) * ANIM.cowlickRad;
-  }
-
-  // the scarf streams out behind, with a wave running down its length
-  const wave = Math.sin(time * ANIM.scarfWaveRate) * ANIM.scarfWaveRad * (0.3 + walk);
-  if (rig.scarf) {
-    rig.scarf.rotation.x = RIG.scarf.tail.restTiltRad + ANIM.scarfStreamRad * walk + wave;
-    rig.scarf.rotation.z = clamp(scarfLag, -ANIM.scarfLagRad, ANIM.scarfLagRad);
-  }
-  if (rig.scarfTip) {
-    // a beat behind the segment above it — one phase offset, and the tail is cloth
-    rig.scarfTip.rotation.x =
-      Math.sin(time * ANIM.scarfWaveRate - 1) * ANIM.scarfWaveRad * 2 * (0.3 + walk);
-  }
-}
-
-/** How far the toe has rolled for a leg at this angle: hard off the back, softer in front. */
-function footRoll(legAngle: number): number {
-  return legAngle > 0 ? legAngle * ANIM.footRollRad : legAngle * ANIM.footRollRad * 0.35;
-}
-
-/** When this character should next blink — soon, but never in step with anyone else. */
-function scheduleBlink(now: number): number {
-  return now + ANIM.blinkEveryMs + Math.random() * ANIM.blinkJitterMs;
-}
+/** Scratch for reading the world scale of the bone the hammer hangs from. */
+const HAND_SCALE = new Vector3();
 
 /**
- * What the face is doing: wincing if it was just hit, shouting through a swing,
- * seeing stars if it is dead, blinking on its own clock, and pleased with itself
- * the rest of the time.
+ * Stand, walk, run or float — and advance the clock that plays it.
  *
- * Swapping the plate's texture is the whole implementation. Nothing else on the
- * character costs so little and does so much for making it read as alive rather
- * than as a doll standing very still.
+ * The cross-fade only fires when the CLIP changes, never per frame: fading an
+ * action into itself every frame would leave the mixer permanently mid-blend and
+ * the character permanently half-posed. Within a clip, speed is expressed as
+ * playback rate instead, which is what keeps the feet on the floor.
  */
-function animateFace(
-  rig: CharacterHandles | null,
-  nextAt: MutableRefObject<number>,
-  now: number,
-  { hurt, fierce, ghost }: { hurt: boolean; fierce: boolean; ghost: boolean },
+function animateLocomotion(
+  rig: ModelCharacterHandles | null,
+  playing: MutableRefObject<ModelClip | null>,
+  speed: number,
+  floating: boolean,
+  dt: number,
 ): void {
-  const face = rig?.face;
-  if (!face) return;
+  if (!rig?.mixer) return;
 
-  // the ref is seeded before the clock is known, so the first blink re-bases off now
-  if (nextAt.current < now - ANIM.blinkMs) nextAt.current = scheduleBlink(now);
-  const blinking = now >= nextAt.current && now < nextAt.current + ANIM.blinkMs;
-  if (now >= nextAt.current + ANIM.blinkMs) nextAt.current = scheduleBlink(now);
+  const wanted = floating ? MODEL_CLIP.Float : locomotionClip(speed);
+  const action = rig.action(wanted);
 
-  const wanted = faceTexture(
-    ghost
-      ? FaceExpression.Dizzy
-      : hurt
-        ? FaceExpression.Hurt
-        : fierce
-          ? FaceExpression.Fierce
-          : blinking
-            ? FaceExpression.Blink
-            : FaceExpression.Happy,
-  );
-  const material = face.material as MeshToonMaterial;
-  // both textures are already compiled into the same material, so this is a swap,
-  // not a shader rebuild — no `needsUpdate`, no hitch
-  if (material.map !== wanted) material.map = wanted;
-}
-
-/** Blow the body and the head out to white for the few frames after a hit lands. */
-function animateFlash(rig: CharacterHandles | null, hitAt: number | undefined, now: number): void {
-  if (!rig) return;
-  const progress = pulse(hitAt, now, COMBAT_FX.flashMs);
-  const strength = progress < 0 ? 0 : (1 - progress) * COMBAT_FX.flashAmount;
-
-  for (const mesh of [rig.bodyMesh, rig.headMesh]) {
-    if (!mesh) continue;
-    const material = mesh.material as MeshToonMaterial;
-    if (material.emissiveIntensity !== strength) material.emissiveIntensity = strength;
+  if (action && playing.current !== wanted) {
+    const previous = playing.current && rig.action(playing.current);
+    action.reset().fadeIn(previous ? MODEL.fadeSeconds : 0).play();
+    if (previous) previous.fadeOut(MODEL.fadeSeconds);
+    playing.current = wanted;
   }
+  if (action) action.timeScale = floating ? 1 : locomotionTimeScale(wanted, speed);
+
+  rig.mixer.update(dt);
 }
 
 // ── The swing ────────────────────────────────────────────────────────────────
@@ -528,19 +365,6 @@ interface SwingPose {
   /** the blow itself, 0→1→0: the lunge, the hop, the twist and the shout */
   effort: number;
 }
-
-/** A swing at rest — arm down, nothing committed. */
-const AT_REST: SwingPose = { raise: 0, sweep: 0, whip: 0, wind: 0, effort: 0 };
-
-/**
- * Euler order for the two joints a swing drives.
- *
- * The arm has to be LIFTED and then SWEPT round, in that order. Three's default
- * 'XYZ' composes them the other way about, which sweeps an arm that is still
- * hanging straight down — a rotation about the axis it is already pointing along,
- * so nothing moves. 'YXZ' lifts first and sweeps the lifted arm, which is a swing.
- */
-const SWEEP_ORDER = "YXZ";
 
 /**
  * How long a swing with this hammer takes (ms): a fraction of ITS OWN cooldown, so
@@ -615,45 +439,6 @@ function swingPose(startedAt: number | undefined, now: number, kind: string): Sw
   };
 }
 
-/**
- * Put a swing onto the body.
- *
- * The arm and the hammer share the same angle and both pivot at the SHOULDER, so
- * the hammer stays in the hand all the way round instead of orbiting a point in
- * space; the whip is added at the wrist on top of that. Everything else here is the
- * body committing to the blow — the crouch, the lunge, the hop, the twist, the free
- * arm thrown back as a counterweight and the feet taking a stance — which is what
- * makes a cartoon character look like they meant it.
- */
-function animateSwing(
-  rig: CharacterHandles | null,
-  arm: Group | null,
-  wrist: Group | null,
-  swing: SwingPose | null,
-): void {
-  const { raise, sweep, whip, wind, effort } = swing ?? AT_REST;
-
-  // the hammer arm carries the whip ON TOP of the sweep: the head is left behind by
-  // the arm and then comes past it, which is the entire weight of the thing
-  if (arm) arm.rotation.set(raise, sweep + whip, RIG.arm.restSpreadRad, SWEEP_ORDER);
-  if (wrist) wrist.rotation.x = HAMMER.restTilt.backRad;
-  if (rig?.armRight) rig.armRight.rotation.set(raise, sweep, RIG.arm.restSpreadRad, SWEEP_ORDER);
-  if (!swing) return;
-
-  if (rig?.lean) {
-    rig.lean.position.y += effort * AVATAR.swingHopM - wind * AVATAR.swingCrouchM;
-    rig.lean.position.z += effort * AVATAR.swingLungeM;
-  }
-  // wound away from the target, then driven through it
-  if (rig?.torso) rig.torso.rotation.y += (wind * 0.5 - effort) * AVATAR.swingTwistRad;
-  if (rig?.head) rig.head.rotation.y += (wind * 0.4 - effort) * AVATAR.swingHeadRad;
-  if (rig?.armLeft) rig.armLeft.rotation.x -= effort * AVATAR.swingFreeArmRad;
-  if (rig?.legRight) rig.legRight.rotation.x += effort * AVATAR.swingStanceRad;
-  if (rig?.legLeft) rig.legLeft.rotation.x -= effort * AVATAR.swingStanceRad;
-  // the scarf snaps forward with the blow
-  if (rig?.scarf) rig.scarf.rotation.x += effort * ANIM.scarfStreamRad * 0.5;
-}
-
 // ── Impact ───────────────────────────────────────────────────────────────────
 
 /**
@@ -661,7 +446,7 @@ function animateSwing(
  * character, so it has to cancel out whatever height the body is at, and shrink
  * away as a ghost floats off.
  */
-function animateShadow(rig: CharacterHandles | null, bodyY: number): void {
+function animateShadow(rig: ModelCharacterHandles | null, bodyY: number): void {
   if (!rig?.shadow) return;
   rig.shadow.position.y = BLOB_SHADOW.liftM - bodyY;
   const size = 1 - clamp01(bodyY / BLOB_SHADOW.fadeHeightM);
@@ -841,36 +626,23 @@ function animatePrank(
 // ── Props ────────────────────────────────────────────────────────────────────
 
 /**
- * The hammer in the right hand.
+ * The hammer, ready to be hung off the model's right hand.
  *
- * The outer group pivots at the SHOULDER and hangs the hammer at exactly the arm's
- * own length — the same joint, the same limb, the same numbers — so the handle is
- * in the fist by construction, through the whole arc and whatever else the arms are
- * doing. The inner group is the WRIST, and it is the only thing the swing's whip
- * touches: the hammer lags behind the arm on the way up and comes over the top of
- * it on the way down, which is what gives a swung weapon its mass.
+ * It is rendered here rather than inside `ModelCharacter` because a hammer is not
+ * part of the character — it is picked up, swapped and dropped — but it is MOUNTED
+ * onto the hand bone by the effect above, which is where the pack puts every other
+ * loose piece. The group is the wrist: Phase 07's swing clip moves the arm, and
+ * anything the hammer needs to do on top of that happens in here.
  */
 const HeldHammer = ({
-  armRef,
-  wristRef,
+  groupRef,
   kind,
 }: {
-  armRef: MutableRefObject<Group | null>;
-  wristRef: MutableRefObject<Group | null>;
+  groupRef: MutableRefObject<Group | null>;
   kind: string;
 }) => (
-  <group
-    ref={armRef}
-    position={[RIG.arm.x, RIG.arm.shoulderY, 0]}
-    rotation={[0, 0, RIG.arm.restSpreadRad]}
-  >
-    <group
-      ref={wristRef}
-      position={[0, -RIG.arm.length - RIG.hand.gripDropM, 0]}
-      rotation={[HAMMER.restTilt.backRad, 0, -HAMMER.restTilt.outRad]}
-    >
-      <HammerModel kind={kind} />
-    </group>
+  <group ref={groupRef} rotation={[HAMMER.restTilt.backRad, 0, -HAMMER.restTilt.outRad]}>
+    <HammerModel kind={kind} />
   </group>
 );
 
